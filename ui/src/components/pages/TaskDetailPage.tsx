@@ -5,8 +5,7 @@ import { Link } from '@tanstack/react-router';
 import { Copy, CaretRight } from '@phosphor-icons/react';
 import { relative } from '@/lib/time';
 import type { Vocab } from '@/lib/cross-ref';
-
-const PRIORITY_VARIANT = { high: 'rose', medium: 'neutral', low: 'outline' } as const;
+import { PRIORITY_VARIANT } from '@/lib/priority';
 
 export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; brief?: string; updates: Update[]; vocab: Vocab }) {
   const isWaiting = task.status === 'in-progress' && !!task.waiting_on;

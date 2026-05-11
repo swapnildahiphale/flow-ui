@@ -14,7 +14,7 @@ export function FilterRail({ projects, tags, search }: { projects: Project[]; ta
       <div>
         <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500 mb-3">Status</div>
         <ul className="space-y-1.5 text-sm">
-          {(['in-progress','backlog','done'] as const).map(s => (
+          {(['in-progress','waiting','backlog','done'] as const).map(s => (
             <li key={s}>
               <button onClick={toggle('status', s)} className={clsx('flex items-center gap-2.5 w-full text-left', search.status === s ? 'text-emerald-700 font-medium' : 'text-slate-700 hover:text-slate-900')}>
                 <span className={clsx('w-3.5 h-3.5 rounded border', search.status === s ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300')} />

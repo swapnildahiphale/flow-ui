@@ -2,6 +2,7 @@ import type { Project, Task } from '@/lib/types';
 import { Link } from '@tanstack/react-router';
 import { Chip } from '@/components/primitives/Chip';
 import { relative } from '@/lib/time';
+import { PRIORITY_VARIANT } from '@/lib/priority';
 
 export function ProjectsPage({ projects, tasks, loading }: { projects: Project[]; tasks: Task[]; loading: boolean }) {
   if (loading) return <div className="p-12 text-slate-400">Loading…</div>;
@@ -28,7 +29,7 @@ export function ProjectsPage({ projects, tasks, loading }: { projects: Project[]
               <Link to="/projects/$slug" params={{ slug: p.slug }} className="block group">
                 <div className="flex items-baseline gap-3 mb-2">
                   <h2 className="text-2xl font-medium tracking-tight text-slate-900 group-hover:text-emerald-700 transition-colors">{p.name}</h2>
-                  <Chip variant={p.priority === 'high' ? 'rose' : p.priority === 'medium' ? 'neutral' : 'outline'}>{p.priority}</Chip>
+                  <Chip variant={PRIORITY_VARIANT[p.priority]}>{p.priority}</Chip>
                 </div>
                 <div className="font-mono text-[12px] text-slate-500 mb-3 truncate">{p.work_dir}</div>
                 <div className="flex items-center gap-4 text-sm text-slate-600">

@@ -4,8 +4,7 @@ import { Chip } from '@/components/primitives/Chip';
 import { StatusDot } from '@/components/motion/StatusDot';
 import { ShimmerOverlay } from '@/components/motion/ShimmerOverlay';
 import { relative } from '@/lib/time';
-
-const PRIORITY_VARIANT = { high: 'rose', medium: 'neutral', low: 'outline' } as const;
+import { PRIORITY_VARIANT } from '@/lib/priority';
 
 export function TaskRowFull({ task }: { task: Task }) {
   return (

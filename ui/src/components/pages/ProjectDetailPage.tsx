@@ -5,6 +5,7 @@ import { Link } from '@tanstack/react-router';
 import { CaretRight } from '@phosphor-icons/react';
 import type { Vocab } from '@/lib/cross-ref';
 import { TaskRowCompact } from '@/components/tasks/TaskRowCompact';
+import { PRIORITY_VARIANT } from '@/lib/priority';
 
 export function ProjectDetailPage({ project, brief, updates, tasks, vocab }: { project: Project; brief?: string; updates: Update[]; tasks: Task[]; vocab: Vocab }) {
   const groups = { 'in-progress': [] as Task[], backlog: [] as Task[], done: [] as Task[] };
@@ -23,7 +24,7 @@ export function ProjectDetailPage({ project, brief, updates, tasks, vocab }: { p
           <h1 className="text-3xl md:text-4xl font-medium tracking-tight leading-tight text-slate-900">{project.name}</h1>
           <div className="mt-3 flex items-center gap-4 text-sm text-slate-500">
             <span className="font-mono">{project.slug}</span>
-            <Chip variant={project.priority === 'high' ? 'rose' : project.priority === 'medium' ? 'neutral' : 'outline'}>{project.priority}</Chip>
+            <Chip variant={PRIORITY_VARIANT[project.priority]}>{project.priority}</Chip>
           </div>
         </div>
       </header>
@@ -66,7 +67,7 @@ export function ProjectDetailPage({ project, brief, updates, tasks, vocab }: { p
         <aside className="col-span-12 lg:col-span-4">
           <div className="sticky top-[80px] rounded-2xl bg-white border border-slate-200/70 p-6 space-y-4">
             <div className="flex items-center justify-between"><span className="text-xs uppercase tracking-wider text-slate-500">Status</span><Chip variant="accent">{project.status}</Chip></div>
-            <div className="flex items-center justify-between"><span className="text-xs uppercase tracking-wider text-slate-500">Priority</span><Chip variant="outline">{project.priority}</Chip></div>
+            <div className="flex items-center justify-between"><span className="text-xs uppercase tracking-wider text-slate-500">Priority</span><Chip variant={PRIORITY_VARIANT[project.priority]}>{project.priority}</Chip></div>
             <div className="pt-4 border-t border-slate-100">
               <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">Workdir</div>
               <div className="font-mono text-[12px] text-slate-700 break-all">{project.work_dir}</div>

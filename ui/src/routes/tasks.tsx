@@ -5,7 +5,7 @@ import { TasksPage } from '@/components/pages/TasksPage';
 import { z } from 'zod';
 
 const TaskSearch = z.object({
-  status:   z.enum(['in-progress','backlog','done']).optional(),
+  status:   z.enum(['in-progress','backlog','done','waiting']).optional(),
   priority: z.enum(['high','medium','low']).optional(),
   project:  z.string().optional(),
   tag:      z.string().optional(),
@@ -16,13 +16,17 @@ export const Route = createFileRoute('/tasks')({
   validateSearch: TaskSearch.parse,
   component: () => {
     const search = Route.useSearch();
-    const tasks    = useQuery({ queryKey: ['tasks', search], queryFn: () => api.tasks(search) });
-    const projects = useQuery({ queryKey: ['projects'],      queryFn: api.projects });
-    const tags     = useQuery({ queryKey: ['tags'],          queryFn: api.tags });
+    // 'waiting' is a synthetic status: in-progress tasks with waiting_on set.
+    // Fetch in-progress from the API, then narrow client-side.
+    const apiParams = search.status === 'waiting' ? { ...search, status: 'in-progress' } : search;
+    const tasks    = useQuery({ queryKey: ['tasks', apiParams], queryFn: () => api.tasks(apiParams) });
+    const projects = useQuery({ queryKey: ['projects'],         queryFn: api.projects });
+    const tags     = useQuery({ queryKey: ['tags'],             queryFn: api.tags });
+    const rows = (tasks.data?.tasks ?? []).filter(t => search.status !== 'waiting' || !!t.waiting_on);
     return (
       <TasksPage
         search={search}
-        tasks={tasks.data?.tasks ?? []}
+        tasks={rows}
         projects={projects.data?.projects ?? []}
         tags={tags.data?.tags ?? []}
         loading={tasks.isLoading}
