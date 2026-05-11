@@ -156,6 +156,23 @@ function buildElements(graph: G): { nodes: Node[]; edges: Edge[]; projectCounts:
   return { nodes, edges, projectCounts };
 }
 
+function computeFocusSet(graph: G, focusedProjectId: string | null): Set<string> | null {
+  if (!focusedProjectId) return null;
+  const set = new Set<string>([focusedProjectId]);
+  // 1-hop: project + membership-connected tasks
+  graph.edges.forEach((e) => {
+    if (e.kind === 'membership' && (e.source === focusedProjectId || e.target === focusedProjectId)) {
+      set.add(e.source === focusedProjectId ? e.target : e.source);
+    }
+  });
+  // 1-hop from those tasks: any neighbor (waiting persons, tags, assignees)
+  graph.edges.forEach((e) => {
+    if (set.has(e.source)) set.add(e.target);
+    if (set.has(e.target)) set.add(e.source);
+  });
+  return set;
+}
+
 function GraphInner({ graph }: { graph: G }) {
   const { nodes: initNodes, edges: initEdges } = useMemo(() => buildElements(graph), [graph]);
 
@@ -167,6 +184,7 @@ function GraphInner({ graph }: { graph: G }) {
     tag: true,
   });
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -198,15 +216,40 @@ function GraphInner({ graph }: { graph: G }) {
     return c;
   }, [graph]);
 
-  // Apply visibility filtering.
+  // Compute focus set (set of node ids that stay full opacity).
+  const focusSet = useMemo(
+    () => computeFocusSet(graph, focusedProjectId),
+    [graph, focusedProjectId]
+  );
+
+  // Apply visibility filtering + fade flag based on focus mode.
   const visibleNodes = useMemo(
-    () => nodes.filter((n) => visible[(n.type as NodeType) ?? 'task']),
-    [nodes, visible]
+    () =>
+      nodes
+        .filter((n) => visible[(n.type as NodeType) ?? 'task'])
+        .map((n) => {
+          const faded = focusSet ? !focusSet.has(n.id) : false;
+          const prev = (n.data ?? {}) as Record<string, unknown>;
+          if ((prev.faded as boolean | undefined) === faded) return n;
+          return { ...n, data: { ...prev, faded } };
+        }),
+    [nodes, visible, focusSet]
   );
   const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
   const visibleEdges = useMemo(
-    () => edges.filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target)),
-    [edges, visibleIds]
+    () =>
+      edges
+        .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+        .map((e) => {
+          if (!focusSet) return e;
+          const bothIn = focusSet.has(e.source) && focusSet.has(e.target);
+          const baseStyle = e.style ?? {};
+          return {
+            ...e,
+            style: { ...baseStyle, opacity: bothIn ? (baseStyle.opacity ?? 1) : 0.08 },
+          };
+        }),
+    [edges, visibleIds, focusSet]
   );
 
   // Re-position the detail card based on selected task's screen position.
@@ -241,6 +284,12 @@ function GraphInner({ graph }: { graph: G }) {
 
   const onNodeClick = useCallback(
     (_e: React.MouseEvent, n: Node) => {
+      if (n.type === 'project') {
+        setFocusedProjectId((prev) => (prev === n.id ? null : n.id));
+        setSelectedSlug(null);
+        setCardPos(null);
+        return;
+      }
       if (n.type !== 'task') return;
       const slug = n.id.replace(/^task:/, '');
       setSelectedSlug(slug);
@@ -251,6 +300,7 @@ function GraphInner({ graph }: { graph: G }) {
   const onPaneClick = useCallback(() => {
     setSelectedSlug(null);
     setCardPos(null);
+    setFocusedProjectId(null);
   }, []);
 
   const toggleLayer = (type: NodeType) => setVisible((v) => ({ ...v, [type]: !v[type] }));

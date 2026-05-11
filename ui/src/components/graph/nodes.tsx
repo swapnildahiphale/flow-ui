@@ -24,12 +24,24 @@ function HandlesTB() {
   );
 }
 
-type TaskData = { label: string; stale?: boolean };
+const FADE_STYLE: React.CSSProperties = {
+  opacity: 0.12,
+  filter: 'grayscale(0.6)',
+  transition: 'opacity 180ms ease, filter 180ms ease',
+};
+const FULL_STYLE: React.CSSProperties = {
+  transition: 'opacity 180ms ease, filter 180ms ease',
+};
+
+type TaskData = { label: string; stale?: boolean; faded?: boolean };
 export const TaskNode = memo(function TaskNode({ data, selected }: NodeProps & { data: TaskData }) {
   const stale = !!data.stale;
   const borderColor = stale ? 'border-amber-600' : 'border-emerald-500';
   return (
-    <div className="flex flex-col items-center" style={{ width: 60 }}>
+    <div
+      className="flex flex-col items-center"
+      style={{ width: 60, ...(data.faded ? FADE_STYLE : FULL_STYLE) }}
+    >
       <div
         className={`rounded-full bg-white ${borderColor} transition-all`}
         style={{
@@ -51,12 +63,12 @@ export const TaskNode = memo(function TaskNode({ data, selected }: NodeProps & {
   );
 });
 
-type ProjectData = { label: string; count: number };
+type ProjectData = { label: string; count: number; faded?: boolean };
 export const ProjectNode = memo(function ProjectNode({ data, selected }: NodeProps & { data: ProjectData }) {
   return (
     <div
       className={`rounded-2xl bg-white border px-3 py-2 ${selected ? 'border-slate-400' : 'border-slate-200'}`}
-      style={{ width: 110 }}
+      style={{ width: 110, ...(data.faded ? FADE_STYLE : FULL_STYLE) }}
     >
       <div className="text-[13px] text-slate-900 font-medium leading-tight">{data.label}</div>
       <div className="text-[10px] font-mono text-slate-500 mt-0.5">
@@ -67,11 +79,14 @@ export const ProjectNode = memo(function ProjectNode({ data, selected }: NodePro
   );
 });
 
-type PersonData = { label: string };
+type PersonData = { label: string; faded?: boolean };
 export const PersonNode = memo(function PersonNode({ data }: NodeProps & { data: PersonData }) {
   const label = data.label.length > 16 ? data.label.slice(0, 14) + '…' : data.label;
   return (
-    <div className="flex flex-col items-center" style={{ width: 60 }}>
+    <div
+      className="flex flex-col items-center"
+      style={{ width: 60, ...(data.faded ? FADE_STYLE : FULL_STYLE) }}
+    >
       <div
         className="rounded-full bg-amber-50 border border-amber-600/50"
         style={{ width: 22, height: 22 }}
@@ -84,10 +99,13 @@ export const PersonNode = memo(function PersonNode({ data }: NodeProps & { data:
   );
 });
 
-type TagData = { label: string };
+type TagData = { label: string; faded?: boolean };
 export const TagNode = memo(function TagNode({ data }: NodeProps & { data: TagData }) {
   return (
-    <div className="flex flex-col items-center" style={{ width: 60 }}>
+    <div
+      className="flex flex-col items-center"
+      style={{ width: 60, ...(data.faded ? FADE_STYLE : FULL_STYLE) }}
+    >
       <div className="flex items-center justify-center" style={{ width: 22, height: 22 }}>
         <div
           className="bg-white border border-emerald-500/60"
