@@ -4,8 +4,8 @@ import { StatTile } from '@/components/bento/StatTile';
 import { ActivityCarousel } from '@/components/bento/ActivityCarousel';
 import { TaskRowCompact } from '@/components/tasks/TaskRowCompact';
 import { Skeleton } from '@/components/primitives/Skeleton';
-import { Button } from '@/components/primitives/Button';
 import { Lightning, ArrowRight } from '@phosphor-icons/react';
+import { Link } from '@tanstack/react-router';
 import { relative } from '@/lib/time';
 
 const todayLabel = new Date()
@@ -24,6 +24,10 @@ export function OverviewPage({ stats, inflight, tags, timeline, loading }: {
   const safeTags = tags ?? [];
   const safeTimeline = timeline ?? [];
   const liveSessions = safeInflight.filter(t => t.session_id).length;
+  const lastLive = safeInflight
+    .filter(t => t.session_id && t.session_started)
+    .slice()
+    .sort((a, b) => (b.session_last_resumed ?? b.session_started!).localeCompare(a.session_last_resumed ?? a.session_started!))[0];
   const inflightTotal = stats?.tasks_by_status?.['in-progress'] ?? 0;
   const total = Object.values(stats?.tasks_by_status ?? {}).reduce((a, b) => a + b, 0);
   const breakdown = ['high', 'medium', 'low'].map(p => ({
@@ -46,7 +50,23 @@ export function OverviewPage({ stats, inflight, tags, timeline, loading }: {
             <span className="live-dot w-2 h-2 rounded-full" />
             <span className="font-mono">{liveSessions} live session{liveSessions === 1 ? '' : 's'}</span>
           </span>
-          <Button variant="soft"><Lightning size={14} /> Resume last</Button>
+          {lastLive ? (
+            <Link
+              to="/tasks/$slug"
+              params={{ slug: lastLive.slug }}
+              className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-[13.5px] font-medium bg-emerald-100/50 text-emerald-700 hover:bg-emerald-100/80 transition active:translate-y-[1px]"
+              title={`Resume ${lastLive.slug}`}
+            >
+              <Lightning size={14} /> Resume last
+            </Link>
+          ) : (
+            <span
+              className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-[13.5px] font-medium bg-slate-100/60 text-slate-400 cursor-not-allowed"
+              title="No live sessions to resume"
+            >
+              <Lightning size={14} /> Resume last
+            </span>
+          )}
         </div>
       </header>
 
@@ -57,14 +77,14 @@ export function OverviewPage({ stats, inflight, tags, timeline, loading }: {
             : <StatTile label="In flight" value={inflightTotal} total={total} breakdown={breakdown} spark={[2, 4, 3, 6, 5, 7, 8]} />}
         </div>
         <div className="col-span-12 md:col-span-7 grid grid-cols-3 gap-x-10 px-2">
-          <div className="border-t border-slate-200 pt-6">
+          <a href="/tasks?status=waiting" className="border-t border-slate-200 pt-6 block hover:text-emerald-700 transition-colors">
             <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Waiting</div>
             <div className="mt-4 text-4xl font-medium tracking-tight font-mono tabular-nums text-slate-900">{stats?.waiting_count ?? 0}</div>
-          </div>
-          <div className="border-t border-slate-200 pt-6">
-            <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">High backlog</div>
+          </a>
+          <a href="/tasks?priority=high" className="border-t border-slate-200 pt-6 block hover:text-emerald-700 transition-colors">
+            <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">High priority</div>
             <div className="mt-4 text-4xl font-medium tracking-tight font-mono tabular-nums text-slate-900">{stats?.tasks_by_priority?.high ?? 0}</div>
-          </div>
+          </a>
           <div className="border-t border-slate-200 pt-6">
             <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Overdue</div>
             <div className="mt-4 text-4xl font-medium tracking-tight font-mono tabular-nums text-slate-900">{stats?.overdue_count ?? 0}</div>
