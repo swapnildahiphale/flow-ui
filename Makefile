@@ -10,14 +10,14 @@ ui-build: ui-install
 	cd ui && pnpm build
 
 go-build:
-	go build -o flow-ui ./cmd/flow-ui
+	go build -o flow-ui .
 
 # Dev: vite on :5173 (with /api proxy), go server on :7777 (api only, no embed)
 dev:
 	@command -v concurrently >/dev/null 2>&1 || npm i -g concurrently
 	concurrently -n "ui,api" -c "cyan,magenta" \
 		"cd ui && pnpm dev" \
-		"go run ./cmd/flow-ui --dev --port 7777"
+		"go run . --dev --port 7777"
 
 test:
 	go test ./...

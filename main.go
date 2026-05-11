@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -48,9 +49,14 @@ func main() {
 	url := fmt.Sprintf("http://127.0.0.1:%d", addr.Port)
 
 	flowRoot := filepath.Dir(resolvedDB)
+	var static fs.FS
+	if !*dev {
+		static = staticFS()
+	}
 	handler := server.New(server.Config{
 		DB:       conn,
 		Dev:      *dev,
+		Static:   static,
 		FlowRoot: flowRoot,
 	})
 
