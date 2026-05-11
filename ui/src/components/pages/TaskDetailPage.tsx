@@ -6,14 +6,19 @@ import { Copy, CaretRight } from '@phosphor-icons/react';
 import { relative } from '@/lib/time';
 import type { Vocab } from '@/lib/cross-ref';
 
+const PRIORITY_VARIANT = { high: 'rose', medium: 'neutral', low: 'outline' } as const;
+
 export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; brief?: string; updates: Update[]; vocab: Vocab }) {
+  const isWaiting = task.status === 'in-progress' && !!task.waiting_on;
+  const statusLabel = isWaiting ? 'waiting' : task.status;
+  const statusVariant: 'accent' | 'amber' | 'neutral' = isWaiting ? 'amber' : task.status === 'done' ? 'neutral' : 'accent';
   return (
     <div className="max-w-[1240px] mx-auto px-10 py-12">
       <div className="flex items-center gap-2 text-sm text-slate-500 mb-8">
         <Link to="/tasks" className="hover:text-slate-800">Tasks</Link>
         <CaretRight size={14} className="text-slate-300" />
         <span className="font-mono text-slate-700">{task.slug}</span>
-        <Chip variant="accent" className="ml-3">{task.status}</Chip>
+        <Chip variant={statusVariant} className="ml-3">{statusLabel}</Chip>
       </div>
 
       <header className="flex items-end justify-between gap-8 mb-10">
@@ -65,10 +70,17 @@ export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; br
 
         <aside className="col-span-12 lg:col-span-4">
           <div className="sticky top-[80px] rounded-2xl bg-white border border-slate-200/70 p-6 space-y-5">
-            <Row label="Status"><Chip variant="accent">{task.status}</Chip></Row>
-            <Row label="Priority"><Chip variant="outline">{task.priority}</Chip></Row>
+            <Row label="Status"><Chip variant={statusVariant}>{statusLabel}</Chip></Row>
+            <Row label="Priority"><Chip variant={PRIORITY_VARIANT[task.priority]}>{task.priority}</Chip></Row>
             <Row label="Due">{task.due_date ? <span className="font-mono text-sm">{task.due_date}</span> : <span className="text-sm text-slate-400">—</span>}</Row>
             {task.assignee && <Row label="Assignee"><span className="text-sm">{task.assignee}</span></Row>}
+            {task.waiting_on && (
+              <Row label="Waiting on">
+                <span className="text-sm text-amber-700 text-right truncate max-w-[200px]" title={task.waiting_on}>
+                  {task.waiting_on.split(/[,(]/)[0]?.trim() ?? task.waiting_on}
+                </span>
+              </Row>
+            )}
             {task.project_slug && <Row label="Project"><span className="text-sm">{task.project_slug}</span></Row>}
             {task.tags.length > 0 && (
               <div className="pt-5 border-t border-slate-100">
