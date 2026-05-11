@@ -18,10 +18,10 @@ const EDGE_FILL_TAG     = 'rgb(16 185 129 / 0.55)';
 
 const THEME = {
   ...lightTheme,
-  canvas: { background: 'transparent' },
+  canvas: { background: '#ffffff' },
   node: {
     ...lightTheme.node,
-    label: { ...lightTheme.node.label, color: 'rgb(71 85 105)', stroke: 'rgba(255,255,255,0.85)' },
+    label: { ...lightTheme.node.label, color: '#475569', stroke: '#ffffff' },
   },
 };
 
