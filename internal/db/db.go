@@ -50,12 +50,16 @@ func OpenReadOnly(path string) (*sql.DB, error) {
 	return conn, nil
 }
 
-// TestDB creates an in-memory SQLite database suitable for testing, with minimal schema.
+// TestDB creates a fresh SQLite database suitable for testing, with the minimal
+// schema applied. Each call returns an independent DB (backed by a unique temp
+// file) and the connection is closed automatically on test cleanup.
 func TestDB(t *testing.T) *sql.DB {
-	conn, err := sql.Open("sqlite", "file::memory:?cache=shared")
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	conn, err := sql.Open("sqlite", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
 	}
+	t.Cleanup(func() { _ = conn.Close() })
 
 	// Create minimal schema for testing
 	schema := `
@@ -95,6 +99,15 @@ func TestDB(t *testing.T) *sql.DB {
 			tag TEXT NOT NULL,
 			PRIMARY KEY (task_slug, tag),
 			FOREIGN KEY (task_slug) REFERENCES tasks(slug)
+		);
+		CREATE TABLE playbooks (
+			slug TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			project_slug TEXT,
+			work_dir TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			archived_at TEXT
 		);
 	`
 	if _, err := conn.Exec(schema); err != nil {
