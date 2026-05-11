@@ -156,6 +156,13 @@ const STYLE: cytoscape.StylesheetCSS[] = [
       'line-opacity': 0.55,
     },
   } as unknown as cytoscape.StylesheetCSS,
+  {
+    selector: '.faded',
+    style: {
+      'opacity': 0.12,
+      'text-opacity': 0.3,
+    },
+  } as unknown as cytoscape.StylesheetCSS,
 ];
 
 const LAYER_LABELS: Record<NodeType, string> = {
@@ -184,6 +191,7 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<cytoscape.Core | null>(null);
   const selectedSlugRef = useRef<string | null>(null);
+  const focusedRef = useRef<string | null>(null);
 
   const [layout, setLayout] = useState<LayoutName>('cose');
   const [visible, setVisible] = useState<Record<NodeType, boolean>>({ task: true, project: true, person: true, tag: true });
@@ -253,9 +261,8 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
       cy.panBy({ x: -140, y: 0 });
     });
 
-    const onTapNode = (evt: cytoscape.EventObject) => {
+    const onTapTask = (evt: cytoscape.EventObject) => {
       const node = evt.target;
-      if (node.data('type') !== 'task') return;
       const slug = String(node.id()).replace(/^task:/, '');
       const p = node.renderedPosition();
       cy.elements().unselect();
@@ -263,9 +270,32 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
       setSelectedSlug(slug);
       setCardPos({ x: p.x, y: p.y });
     };
+    const onTapProject = (evt: cytoscape.EventObject) => {
+      const projectNode = evt.target;
+      const id = String(projectNode.id());
+      // Toggle off if same project clicked again
+      if (focusedRef.current === id) {
+        cy.elements().removeClass('faded');
+        focusedRef.current = null;
+        return;
+      }
+      // Membership edges: source=task, target=project — tasks are incomers of project
+      const tasks = projectNode.incomers('edge[kind="membership"]').sources();
+      const tasksNeighborhood = tasks.openNeighborhood();
+      const focus = projectNode
+        .union(tasks)
+        .union(tasksNeighborhood)
+        .union(projectNode.connectedEdges())
+        .union(tasks.connectedEdges());
+      cy.elements().addClass('faded');
+      focus.removeClass('faded');
+      focusedRef.current = id;
+    };
     const onTapBg = (evt: cytoscape.EventObject) => {
       if (evt.target === cy) {
         cy.elements().unselect();
+        cy.elements().removeClass('faded');
+        focusedRef.current = null;
         setSelectedSlug(null);
         setCardPos(null);
       }
@@ -280,8 +310,11 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
       }
     };
 
-    cy.on('tap', 'node', onTapNode);
+    cy.on('tap', 'node[type="task"]', onTapTask);
+    cy.on('tap', 'node[type="project"]', onTapProject);
     cy.on('tap', onTapBg);
+    // Expose for testing
+    (window as unknown as { __cy?: cytoscape.Core }).__cy = cy;
     cy.on('pan zoom', onViewport);
     cy.on('position', 'node', (evt) => {
       const slug = selectedSlugRef.current;
