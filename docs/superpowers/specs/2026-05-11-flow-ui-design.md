@@ -63,7 +63,7 @@ flow-ui/
 
 ## 5. Information Architecture
 
-**Chrome:** persistent left sidebar, 210px expanded → 56px icon-only collapsed (state in `localStorage`). Bottom of sidebar shows live-sessions dot linking to running-sessions view.
+**Chrome:** persistent left sidebar is the sole navigation surface. 230px expanded → 64px icon-only collapsed (state in `localStorage`). Bottom of sidebar shows live-sessions dot linking to running-sessions view. The top bar holds only the brand wordmark and the `Cmd+K` Search button — no top tabs. Active sidebar item gets a soft-emerald pill background plus a 3px emerald accent bar on its inner edge.
 
 **Routes (v1, full scope):**
 
@@ -87,7 +87,16 @@ Plus a global `Cmd+K` palette for jump-to-task/project (shadcn `command`).
 
 ### 6.1 Overview (`/`)
 
-Bento 2.0 grid. Hero: "Today" + mono date + live-sessions dot. Focal stat tile "In flight" with accent-tinted soft gradient, breakdowns underneath. Right rail uses `border-t` dividers (no card boxes) for Waiting / High backlog / Overdue. Below: in-flight task list (sparse `divide-y` rows). Bottom panels: waiting-on leaderboard + tag cloud (left), recent updates feed (right, last 5 across all tasks).
+Bento 2.0 grid. Hero: "Today<span class="accent">.</span>" + mono date + live-sessions dot + "Resume last" soft-accent button. Focal stat tile "In flight" with accent-tinted soft gradient and a breathing accent halo, 7-bar activity sparkline, and high/medium/low breakdown. Right rail uses `border-t` dividers (no card boxes) for Waiting / High backlog / Overdue.
+
+**In-flight task rows (compact summary form, Overview only):**
+- Grid: `12px | minmax(0,1fr) | auto`.
+- Left: status dot (live = pulse, stale = static slate).
+- Middle: stacked slug (mono) + project eyebrow on row 1, task name truncated on row 2.
+- Right: status chip on top (`in flight` / `waiting · <name>` / `stale · Nd`), single mono meta line below combining relative + absolute timestamp (e.g., `just now · 16:58`).
+- Tags are **not** rendered on Overview rows — they live on the dedicated Tasks page where the row has room. The Tag cloud panel surfaces them globally on Overview instead.
+
+Below the in-flight list: a 14-day project-activity carousel (Bento Archetype #4 — seamless `translateX(-50%)` loop) and a Recent updates feed (last 5 across all tasks, anchored-timestamp pattern). Right column of the lower bento: Waiting-on leaderboard + Tag cloud.
 
 ### 6.2 Tasks (`/tasks`)
 
