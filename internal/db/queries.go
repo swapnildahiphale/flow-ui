@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 )
 
 const taskColumns = `
@@ -13,6 +14,17 @@ const taskColumns = `
 	t.status_changed_at, t.session_id, t.session_started,
 	t.session_last_resumed, t.created_at, t.updated_at, t.archived_at
 `
+
+func computeStale(status, updatedAt string) bool {
+	if status != "in-progress" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, updatedAt)
+	if err != nil {
+		return false
+	}
+	return time.Since(t) > 7*24*time.Hour
+}
 
 type TaskFilter struct {
 	Status          string // "", "backlog", "in-progress", "done"
@@ -79,6 +91,7 @@ func ListTasks(ctx context.Context, conn *sql.DB, f TaskFilter) ([]Task, error) 
 		); err != nil {
 			return nil, fmt.Errorf("scan task: %w", err)
 		}
+		t.Stale = computeStale(t.Status, t.UpdatedAt)
 		t.Tags = []string{}
 		tasks = append(tasks, t)
 		slugs = append(slugs, t.Slug)
@@ -141,6 +154,7 @@ func GetTask(ctx context.Context, conn *sql.DB, slug string) (*Task, error) {
 		}
 		return nil, fmt.Errorf("get task: %w", err)
 	}
+	t.Stale = computeStale(t.Status, t.UpdatedAt)
 	t.Tags = []string{}
 	tasks := []Task{t}
 	if err := hydrateTags(ctx, conn, tasks, []string{t.Slug}); err != nil {

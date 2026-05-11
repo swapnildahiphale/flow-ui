@@ -34,6 +34,7 @@ type Task struct {
 	UpdatedAt          string   `json:"updated_at"`
 	ArchivedAt         *string  `json:"archived_at,omitempty"`
 	Tags               []string `json:"tags"`
+	Stale              bool     `json:"stale"`
 }
 
 type Playbook struct {
