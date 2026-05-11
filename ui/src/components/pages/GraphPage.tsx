@@ -12,7 +12,7 @@ import {
   type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY } from 'd3-force';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowRight, GraphIcon } from '@phosphor-icons/react';
@@ -60,22 +60,24 @@ interface SimNode { id: string; x: number; y: number; vx?: number; vy?: number; 
 interface SimLink { source: string | SimNode; target: string | SimNode }
 
 function layoutForce(nodes: Node[], edges: Edge[]): Node[] {
-  const w = 1100;
-  const h = 700;
+  const w = 600;
+  const h = 400;
   const simNodes: SimNode[] = nodes.map((n, i) => ({
     id: n.id,
     type: n.type,
-    x: w / 2 + Math.cos((i / nodes.length) * Math.PI * 2) * 200 + (Math.random() - 0.5) * 40,
-    y: h / 2 + Math.sin((i / nodes.length) * Math.PI * 2) * 200 + (Math.random() - 0.5) * 40,
+    x: w / 2 + Math.cos((i / nodes.length) * Math.PI * 2) * 80 + (Math.random() - 0.5) * 20,
+    y: h / 2 + Math.sin((i / nodes.length) * Math.PI * 2) * 80 + (Math.random() - 0.5) * 20,
   }));
   const simEdges: SimLink[] = edges.map((e) => ({ source: e.source, target: e.target }));
   const sim = forceSimulation<SimNode>(simNodes)
-    .force('link', forceLink<SimNode, SimLink>(simEdges).id((d) => d.id).distance(110).strength(0.6))
-    .force('charge', forceManyBody<SimNode>().strength(-380))
+    .force('link', forceLink<SimNode, SimLink>(simEdges).id((d) => d.id).distance(70).strength(0.7))
+    .force('charge', forceManyBody<SimNode>().strength(-160))
     .force('center', forceCenter(w / 2, h / 2))
-    .force('collide', forceCollide<SimNode>().radius((d) => (d.type === 'project' ? 70 : 38)).strength(1))
+    .force('x', forceX<SimNode>(w / 2).strength(0.09))
+    .force('y', forceY<SimNode>(h / 2).strength(0.11))
+    .force('collide', forceCollide<SimNode>().radius((d) => (d.type === 'project' ? 58 : 24)).strength(0.95))
     .stop();
-  for (let i = 0; i < 300; i++) sim.tick();
+  for (let i = 0; i < 400; i++) sim.tick();
   const byId = new Map(simNodes.map((s) => [s.id, s]));
   return nodes.map((n) => {
     const s = byId.get(n.id);
@@ -356,7 +358,7 @@ function GraphInner({ graph }: { graph: G }) {
         onPaneClick={onPaneClick}
         onMove={onMove}
         fitView
-        fitViewOptions={{ padding: 0.18 }}
+        fitViewOptions={{ padding: 0.05, maxZoom: 1.4, minZoom: 0.6 }}
         panOnDrag
         zoomOnScroll
         nodesDraggable
