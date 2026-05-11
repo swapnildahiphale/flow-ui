@@ -32,6 +32,7 @@ type TaskFilter struct {
 	ProjectSlug     string // "" = any; "(none)" = floating only
 	Tag             string // "" = any
 	Kind            string // "", "regular", "playbook_run"
+	PlaybookSlug    string // "" = any; filter by playbook
 	IncludeArchived bool
 }
 
@@ -60,6 +61,10 @@ func ListTasks(ctx context.Context, conn *sql.DB, f TaskFilter) ([]Task, error) 
 	if f.Kind != "" {
 		clauses = append(clauses, "t.kind = ?")
 		args = append(args, f.Kind)
+	}
+	if f.PlaybookSlug != "" {
+		clauses = append(clauses, "t.playbook_slug = ?")
+		args = append(args, f.PlaybookSlug)
 	}
 	if f.Tag != "" {
 		clauses = append(clauses, "t.slug IN (SELECT task_slug FROM task_tags WHERE tag = ?)")
@@ -289,4 +294,55 @@ func GetStats(ctx context.Context, conn *sql.DB) (*Stats, error) {
 	}
 
 	return s, nil
+}
+
+// GetProject fetches a single project by slug. Returns nil, nil if not found.
+func GetProject(ctx context.Context, conn *sql.DB, slug string) (*Project, error) {
+	q := `SELECT slug, name, status, priority, work_dir, created_at, updated_at, archived_at FROM projects WHERE slug = ?`
+	row := conn.QueryRowContext(ctx, q, slug)
+	var p Project
+	if err := row.Scan(&p.Slug, &p.Name, &p.Status, &p.Priority, &p.WorkDir, &p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &p, nil
+}
+
+// ListPlaybooks returns playbooks ordered by updated_at DESC.
+func ListPlaybooks(ctx context.Context, conn *sql.DB, includeArchived bool) ([]Playbook, error) {
+	q := `SELECT slug, name, project_slug, work_dir, created_at, updated_at, archived_at FROM playbooks`
+	if !includeArchived {
+		q += ` WHERE archived_at IS NULL`
+	}
+	q += ` ORDER BY updated_at DESC`
+	rows, err := conn.QueryContext(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Playbook{}
+	for rows.Next() {
+		var p Playbook
+		if err := rows.Scan(&p.Slug, &p.Name, &p.ProjectSlug, &p.WorkDir, &p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// GetPlaybook fetches a single playbook by slug. Returns nil, nil if not found.
+func GetPlaybook(ctx context.Context, conn *sql.DB, slug string) (*Playbook, error) {
+	q := `SELECT slug, name, project_slug, work_dir, created_at, updated_at, archived_at FROM playbooks WHERE slug = ?`
+	row := conn.QueryRowContext(ctx, q, slug)
+	var p Playbook
+	if err := row.Scan(&p.Slug, &p.Name, &p.ProjectSlug, &p.WorkDir, &p.CreatedAt, &p.UpdatedAt, &p.ArchivedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &p, nil
 }

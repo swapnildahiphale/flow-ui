@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"syscall"
 	"time"
@@ -46,9 +47,11 @@ func main() {
 	addr := listener.Addr().(*net.TCPAddr)
 	url := fmt.Sprintf("http://127.0.0.1:%d", addr.Port)
 
+	flowRoot := filepath.Dir(resolvedDB)
 	handler := server.New(server.Config{
-		DB:  conn,
-		Dev: *dev,
+		DB:       conn,
+		Dev:      *dev,
+		FlowRoot: flowRoot,
 	})
 
 	srv := &http.Server{

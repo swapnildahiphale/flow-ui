@@ -3,17 +3,20 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/swapnildahiphale/flow-ui/internal/db"
+	"github.com/swapnildahiphale/flow-ui/internal/files"
 )
 
 type Handler struct {
-	DB *sql.DB
+	DB    *sql.DB
+	Files *files.Reader
 }
 
-func New(conn *sql.DB) *Handler {
-	return &Handler{DB: conn}
+func New(conn *sql.DB, root string) *Handler {
+	return &Handler{DB: conn, Files: &files.Reader{Root: root}}
 }
 
 func (h *Handler) Routes(mux *http.ServeMux) {
@@ -21,7 +24,21 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/stats", h.stats)
 	mux.HandleFunc("GET /api/v1/tasks", h.listTasks)
 	mux.HandleFunc("GET /api/v1/tasks/{slug}", h.getTask)
+	mux.HandleFunc("GET /api/v1/tasks/{slug}/brief", h.taskBrief)
+	mux.HandleFunc("GET /api/v1/tasks/{slug}/updates", h.taskUpdates)
 	mux.HandleFunc("GET /api/v1/projects", h.listProjects)
+	mux.HandleFunc("GET /api/v1/projects/{slug}", h.getProject)
+	mux.HandleFunc("GET /api/v1/projects/{slug}/brief", h.projectBrief)
+	mux.HandleFunc("GET /api/v1/projects/{slug}/updates", h.projectUpdates)
+	mux.HandleFunc("GET /api/v1/projects/{slug}/tasks", h.projectTasks)
+	mux.HandleFunc("GET /api/v1/playbooks", h.listPlaybooks)
+	mux.HandleFunc("GET /api/v1/playbooks/{slug}", h.getPlaybook)
+	mux.HandleFunc("GET /api/v1/playbooks/{slug}/brief", h.playbookBrief)
+	mux.HandleFunc("GET /api/v1/playbooks/{slug}/runs", h.playbookRuns)
+	mux.HandleFunc("GET /api/v1/kb", h.kbList)
+	mux.HandleFunc("GET /api/v1/kb/{file}", h.kbRead)
+	mux.HandleFunc("GET /api/v1/timeline", h.timeline)
+	mux.HandleFunc("GET /api/v1/graph", h.graph)
 	mux.HandleFunc("GET /api/v1/tags", h.listTags)
 }
 
@@ -96,6 +113,145 @@ func (h *Handler) listTags(w http.ResponseWriter, r *http.Request) {
 		"tags":  tags,
 		"count": len(tags),
 	})
+}
+
+// --- file-backed handlers ---
+
+func (h *Handler) taskBrief(w http.ResponseWriter, r *http.Request) {
+	h.briefHandler(w, r, "tasks", r.PathValue("slug"))
+}
+func (h *Handler) projectBrief(w http.ResponseWriter, r *http.Request) {
+	h.briefHandler(w, r, "projects", r.PathValue("slug"))
+}
+func (h *Handler) playbookBrief(w http.ResponseWriter, r *http.Request) {
+	h.briefHandler(w, r, "playbooks", r.PathValue("slug"))
+}
+func (h *Handler) briefHandler(w http.ResponseWriter, r *http.Request, kind, slug string) {
+	body, err := h.Files.Brief(kind, slug)
+	if errors.Is(err, files.ErrNotFound) {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"markdown": body})
+}
+
+func (h *Handler) taskUpdates(w http.ResponseWriter, r *http.Request) {
+	h.updatesHandler(w, r, "tasks", r.PathValue("slug"))
+}
+func (h *Handler) projectUpdates(w http.ResponseWriter, r *http.Request) {
+	h.updatesHandler(w, r, "projects", r.PathValue("slug"))
+}
+func (h *Handler) updatesHandler(w http.ResponseWriter, r *http.Request, kind, slug string) {
+	ups, err := h.Files.Updates(kind, slug)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"updates": ups, "count": len(ups)})
+}
+
+func (h *Handler) kbList(w http.ResponseWriter, r *http.Request) {
+	list, err := h.Files.KBList()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"files": list, "count": len(list)})
+}
+func (h *Handler) kbRead(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("file")
+	body, mtime, err := h.Files.KBRead(name)
+	if errors.Is(err, files.ErrNotFound) {
+		writeError(w, http.StatusNotFound, err)
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"markdown": body, "mtime": mtime, "name": name})
+}
+
+func (h *Handler) timeline(w http.ResponseWriter, r *http.Request) {
+	all, err := h.Files.AllUpdates()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	since := r.URL.Query().Get("since")
+	if since != "" {
+		filtered := all[:0]
+		for _, e := range all {
+			if e.Date >= since {
+				filtered = append(filtered, e)
+			}
+		}
+		all = filtered
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": all, "count": len(all)})
+}
+
+// --- DB-backed project + playbook handlers ---
+
+func (h *Handler) getProject(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	p, err := db.GetProject(r.Context(), h.DB, slug)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if p == nil {
+		writeError(w, http.StatusNotFound, errString("project not found"))
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+func (h *Handler) projectTasks(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	tasks, err := db.ListTasks(r.Context(), h.DB, db.TaskFilter{ProjectSlug: slug})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tasks": tasks, "count": len(tasks)})
+}
+func (h *Handler) listPlaybooks(w http.ResponseWriter, r *http.Request) {
+	pbs, err := db.ListPlaybooks(r.Context(), h.DB, r.URL.Query().Get("archived") == "1")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"playbooks": pbs, "count": len(pbs)})
+}
+func (h *Handler) getPlaybook(w http.ResponseWriter, r *http.Request) {
+	p, err := db.GetPlaybook(r.Context(), h.DB, r.PathValue("slug"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if p == nil {
+		writeError(w, http.StatusNotFound, errString("playbook not found"))
+		return
+	}
+	writeJSON(w, http.StatusOK, p)
+}
+func (h *Handler) playbookRuns(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	runs, err := db.ListTasks(r.Context(), h.DB, db.TaskFilter{Kind: "playbook_run", PlaybookSlug: slug})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": runs, "count": len(runs)})
+}
+
+// graph is a stub — will be wired to internal/graph in Task 4.
+func (h *Handler) graph(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"nodes": []any{}, "edges": []any{}, "empty": true})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

@@ -14,13 +14,14 @@ type Config struct {
 	Dev bool
 	// Static is the embedded SPA filesystem rooted at index.html.
 	// In dev mode this may be nil — Vite serves the SPA.
-	Static fs.FS
+	Static   fs.FS
+	FlowRoot string // absolute path to ~/.flow root
 }
 
 func New(cfg Config) http.Handler {
 	mux := http.NewServeMux()
 
-	apiH := api.New(cfg.DB)
+	apiH := api.New(cfg.DB, cfg.FlowRoot)
 	apiH.Routes(mux)
 
 	if !cfg.Dev && cfg.Static != nil {
