@@ -8,6 +8,7 @@ import (
 
 	"github.com/swapnildahiphale/flow-ui/internal/db"
 	"github.com/swapnildahiphale/flow-ui/internal/files"
+	"github.com/swapnildahiphale/flow-ui/internal/graph"
 )
 
 type Handler struct {
@@ -249,9 +250,18 @@ func (h *Handler) playbookRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs, "count": len(runs)})
 }
 
-// graph is a stub — will be wired to internal/graph in Task 4.
 func (h *Handler) graph(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"nodes": []any{}, "edges": []any{}, "empty": true})
+	g, err := graph.Build(r.Context(), h.DB)
+	if err != nil {
+		// Empty graph is a 200 with explicit empty + a hint
+		if g != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"nodes": g.Nodes, "edges": g.Edges, "empty": true})
+			return
+		}
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

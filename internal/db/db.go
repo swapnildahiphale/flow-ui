@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 
 	_ "modernc.org/sqlite"
 )
@@ -47,4 +48,58 @@ func OpenReadOnly(path string) (*sql.DB, error) {
 	}
 	conn.SetMaxOpenConns(4)
 	return conn, nil
+}
+
+// TestDB creates an in-memory SQLite database suitable for testing, with minimal schema.
+func TestDB(t *testing.T) *sql.DB {
+	conn, err := sql.Open("sqlite", "file::memory:?cache=shared")
+	if err != nil {
+		t.Fatalf("open test db: %v", err)
+	}
+
+	// Create minimal schema for testing
+	schema := `
+		CREATE TABLE projects (
+			slug TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			status TEXT NOT NULL,
+			priority TEXT NOT NULL,
+			work_dir TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			archived_at TEXT
+		);
+		CREATE TABLE tasks (
+			slug TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			project_slug TEXT,
+			status TEXT NOT NULL,
+			kind TEXT NOT NULL,
+			playbook_slug TEXT,
+			priority TEXT NOT NULL,
+			work_dir TEXT NOT NULL,
+			waiting_on TEXT,
+			due_date TEXT,
+			assignee TEXT,
+			status_changed_at TEXT,
+			session_id TEXT,
+			session_started TEXT,
+			session_last_resumed TEXT,
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			archived_at TEXT,
+			FOREIGN KEY (project_slug) REFERENCES projects(slug)
+		);
+		CREATE TABLE task_tags (
+			task_slug TEXT NOT NULL,
+			tag TEXT NOT NULL,
+			PRIMARY KEY (task_slug, tag),
+			FOREIGN KEY (task_slug) REFERENCES tasks(slug)
+		);
+	`
+	if _, err := conn.Exec(schema); err != nil {
+		t.Fatalf("create schema: %v", err)
+	}
+
+	return conn
 }
