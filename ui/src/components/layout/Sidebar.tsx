@@ -1,4 +1,3 @@
-import { useState, useEffect } from 'react';
 import { useRouterState } from '@tanstack/react-router';
 import { House, ListChecks, FolderOpen, BookOpen, Clock, GraphIcon as GraphI, PlayCircle, CaretLeft, CaretRight } from '@phosphor-icons/react';
 import { clsx } from '@/lib/clsx';
@@ -13,14 +12,7 @@ const NAV = [
   { to: '/playbooks', label: 'Playbooks',      icon: PlayCircle },
 ] as const;
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    try { return localStorage.getItem('flow-ui:sb') === 'collapsed'; } catch { return false; }
-  });
-  useEffect(() => {
-    try { localStorage.setItem('flow-ui:sb', collapsed ? 'collapsed' : 'expanded'); } catch {}
-  }, [collapsed]);
-
+export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const path = useRouterState({ select: s => s.location.pathname });
 
   return (
@@ -30,7 +22,7 @@ export function Sidebar() {
     >
       <div className="px-3 mb-6 flex items-center justify-between">
         {!collapsed && <span className="text-[11px] uppercase tracking-[0.22em] text-slate-400">workspace</span>}
-        <button onClick={() => setCollapsed(c => !c)} className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-md hover:bg-slate-100 ml-auto" aria-label="Toggle sidebar">
+        <button onClick={onToggle} className="text-slate-400 hover:text-slate-700 transition-colors p-1 rounded-md hover:bg-slate-100 ml-auto" aria-label="Toggle sidebar">
           {collapsed ? <CaretRight size={14} /> : <CaretLeft size={14} />}
         </button>
       </div>
