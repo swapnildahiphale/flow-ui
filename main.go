@@ -22,12 +22,21 @@ import (
 
 const defaultDBPath = "~/.flow/flow.db"
 
+// version is set at build time via -ldflags "-X main.version=<tag>".
+var version = "dev"
+
 func main() {
 	port := flag.Int("port", 0, "port to bind on 127.0.0.1 (0 = pick a free one)")
 	dbPath := flag.String("db", defaultDBPath, "path to flow.db (supports ~)")
 	dev := flag.Bool("dev", false, "dev mode: skip SPA embed, serve API only (used with `make dev`)")
 	noOpen := flag.Bool("no-open", false, "don't open the browser after starting")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	resolvedDB, err := db.ResolvePath(*dbPath)
 	if err != nil {
