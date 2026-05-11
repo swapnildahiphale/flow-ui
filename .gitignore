@@ -1,0 +1,24 @@
+# Binary
+/flow-ui
+/dist/
+
+# Go
+*.test
+*.out
+*.exe
+
+# Node
+ui/node_modules/
+ui/dist/
+ui/.vite/
+ui/*.log
+
+# Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Env
+.env
+.env.local

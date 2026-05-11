@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>flow-ui — accent preview</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Geist', 'system-ui', 'sans-serif'],
+          mono: ['"Geist Mono"', 'ui-monospace', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  :root[data-accent="emerald"]      { --accent: 16 185 129;  --accent-soft: 209 250 229; --accent-deep: 5 150 105; }
+  :root[data-accent="electric"]     { --accent: 37 99 235;   --accent-soft: 219 234 254; --accent-deep: 29 78 216; }
+  :root[data-accent="rose"]         { --accent: 225 29 72;   --accent-soft: 255 228 230; --accent-deep: 190 18 60; }
+  :root[data-accent="amber"]        { --accent: 217 119 6;   --accent-soft: 254 243 199; --accent-deep: 180 83 9; }
+
+  body { background: #f9fafb; color: rgb(24 24 27); font-family: 'Geist', system-ui, sans-serif; }
+
+  .accent-bg { background-color: rgb(var(--accent)); }
+  .accent-text { color: rgb(var(--accent-deep)); }
+  .accent-soft-bg { background-color: rgb(var(--accent-soft) / 0.55); }
+  .accent-ring { box-shadow: 0 0 0 3px rgb(var(--accent) / 0.18); }
+  .accent-border { border-color: rgb(var(--accent) / 0.35); }
+
+  .card {
+    background: white;
+    border: 1px solid rgb(226 232 240 / 0.7);
+    border-radius: 2.5rem;
+    box-shadow: 0 20px 40px -15px rgba(15, 23, 42, 0.05);
+  }
+  .row {
+    border-bottom: 1px solid rgb(241 245 249);
+  }
+  .row:last-child { border-bottom: none; }
+
+  /* Pulse for live session dot */
+  @keyframes livepulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgb(var(--accent) / 0.45); }
+    50%      { box-shadow: 0 0 0 6px rgb(var(--accent) / 0); }
+  }
+  .live-dot {
+    background-color: rgb(var(--accent));
+    animation: livepulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Shimmer for stale */
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .shimmer {
+    background: linear-gradient(110deg, transparent 25%, rgb(241 245 249 / 0.7) 50%, transparent 75%);
+    background-size: 200% 100%;
+    animation: shimmer 2.5s linear infinite;
+  }
+
+  /* Subtle stat-card tint of the accent for the focal stat */
+  .stat-focal {
+    background: linear-gradient(180deg, rgb(var(--accent-soft) / 0.55), white 80%);
+  }
+</style>
+</head>
+<body class="min-h-[100dvh]">
+
+<!-- Accent picker -->
+<header class="sticky top-0 z-10 backdrop-blur bg-white/70 border-b border-slate-200/60">
+  <div class="max-w-7xl mx-auto px-8 py-4 flex items-center justify-between">
+    <div class="flex items-baseline gap-3">
+      <span class="text-lg font-semibold tracking-tight">flow-ui</span>
+      <span class="text-xs uppercase tracking-[0.18em] text-slate-500">accent preview</span>
+    </div>
+    <div class="flex items-center gap-1 p-1 rounded-full bg-slate-100/80 border border-slate-200/60">
+      <button data-pick="emerald"   class="accent-btn text-sm font-medium px-4 py-1.5 rounded-full transition">Emerald</button>
+      <button data-pick="electric"  class="accent-btn text-sm font-medium px-4 py-1.5 rounded-full transition">Electric Blue</button>
+      <button data-pick="rose"      class="accent-btn text-sm font-medium px-4 py-1.5 rounded-full transition">Deep Rose</button>
+      <button data-pick="amber"     class="accent-btn text-sm font-medium px-4 py-1.5 rounded-full transition">Amber</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-8 py-10 space-y-12">
+
+  <!-- Section header -->
+  <section class="flex items-end justify-between gap-8">
+    <div>
+      <div class="text-xs uppercase tracking-[0.22em] text-slate-500 mb-3">Overview</div>
+      <h1 class="text-5xl md:text-6xl font-medium tracking-tighter leading-none text-slate-900">
+        Today
+      </h1>
+      <p class="mt-3 text-slate-500 font-mono text-sm tabular-nums">Mon · 11 May · 2026</p>
+    </div>
+    <div class="flex items-center gap-3 text-sm text-slate-500">
+      <span class="inline-flex items-center gap-2">
+        <span class="live-dot inline-block size-2 rounded-full"></span>
+        <span class="font-mono">3 live sessions</span>
+      </span>
+    </div>
+  </section>
+
+  <!-- Bento row: stat tiles -->
+  <section class="grid grid-cols-12 gap-6">
+    <!-- Focal stat (accent-tinted) -->
+    <div class="card stat-focal col-span-12 md:col-span-5 p-10 relative">
+      <div class="text-xs uppercase tracking-[0.18em] text-slate-500">In flight</div>
+      <div class="mt-6 flex items-baseline gap-3">
+        <span class="text-7xl font-medium tracking-tighter accent-text tabular-nums">6</span>
+        <span class="text-slate-400 font-mono text-sm">/ 13 total</span>
+      </div>
+      <div class="mt-8 grid grid-cols-3 gap-3 text-sm">
+        <div>
+          <div class="font-mono tabular-nums text-slate-900 text-base">3</div>
+          <div class="text-slate-500 mt-0.5">high</div>
+        </div>
+        <div>
+          <div class="font-mono tabular-nums text-slate-900 text-base">2</div>
+          <div class="text-slate-500 mt-0.5">medium</div>
+        </div>
+        <div>
+          <div class="font-mono tabular-nums text-slate-900 text-base">1</div>
+          <div class="text-slate-500 mt-0.5">low</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Three smaller stats on right (data-rows style, no card boxes per Rule 4) -->
+    <div class="col-span-12 md:col-span-7 grid grid-cols-3 gap-x-8 px-2">
+      <div class="border-t border-slate-200 pt-6">
+        <div class="text-xs uppercase tracking-[0.18em] text-slate-500">Waiting</div>
+        <div class="mt-4 text-4xl font-medium tracking-tight tabular-nums text-slate-900">1</div>
+        <div class="mt-3 text-sm text-slate-500 leading-relaxed">
+          Sameer · <span class="font-mono text-slate-700">callqa-deepgram</span>
+        </div>
+      </div>
+      <div class="border-t border-slate-200 pt-6">
+        <div class="text-xs uppercase tracking-[0.18em] text-slate-500">High backlog</div>
+        <div class="mt-4 text-4xl font-medium tracking-tight tabular-nums text-slate-900">0</div>
+        <div class="mt-3 text-sm text-slate-500 leading-relaxed">
+          Nothing queued.
+        </div>
+      </div>
+      <div class="border-t border-slate-200 pt-6">
+        <div class="text-xs uppercase tracking-[0.18em] text-slate-500">Overdue</div>
+        <div class="mt-4 text-4xl font-medium tracking-tight tabular-nums text-slate-900">0</div>
+        <div class="mt-3 text-sm text-slate-500 leading-relaxed">
+          All clear.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tasks list (sparse, divide-y, NOT card boxes) -->
+  <section>
+    <div class="flex items-end justify-between mb-6">
+      <h2 class="text-xl font-medium tracking-tight text-slate-900">In flight</h2>
+      <a class="text-sm accent-text font-medium hover:underline cursor-pointer">All tasks <span class="font-mono">→</span></a>
+    </div>
+
+    <div class="card p-2">
+      <ul class="divide-y divide-slate-100">
+        <!-- row 1 -->
+        <li class="row flex items-center gap-6 px-6 py-5 hover:bg-slate-50/60 transition">
+          <span class="live-dot size-2 rounded-full shrink-0"></span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-baseline gap-3">
+              <span class="font-mono text-xs text-slate-500">callqa-deepgram</span>
+              <span class="text-[10px] uppercase tracking-[0.16em] text-slate-400">callqa</span>
+            </div>
+            <div class="mt-1 text-[15px] text-slate-900 truncate">ENGSVC-9771: CallQA Deepgram integration</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-mono accent-soft-bg accent-text px-2 py-0.5 rounded-full">#apisix</span>
+            <span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">#deepgram</span>
+            <span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">#callqa</span>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-xs uppercase tracking-[0.14em] text-amber-700 font-medium">waiting</div>
+            <div class="font-mono text-[11px] text-slate-500 mt-0.5">Sameer</div>
+          </div>
+          <div class="font-mono text-xs text-slate-400 shrink-0 tabular-nums w-16 text-right">15:45</div>
+        </li>
+
+        <!-- row 2: live, no waiting -->
+        <li class="row flex items-center gap-6 px-6 py-5 hover:bg-slate-50/60 transition">
+          <span class="live-dot size-2 rounded-full shrink-0"></span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-baseline gap-3">
+              <span class="font-mono text-xs text-slate-500">flow-ui</span>
+              <span class="text-[10px] uppercase tracking-[0.16em] text-slate-400">flow-itself</span>
+            </div>
+            <div class="mt-1 text-[15px] text-slate-900 truncate">Local web UI to visualize flow tasks, projects, KB</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-mono accent-soft-bg accent-text px-2 py-0.5 rounded-full">#flow</span>
+            <span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">#poc</span>
+            <span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">#ui</span>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-xs uppercase tracking-[0.14em] accent-text font-medium">in flight</div>
+            <div class="font-mono text-[11px] text-slate-500 mt-0.5">just now</div>
+          </div>
+          <div class="font-mono text-xs text-slate-400 shrink-0 tabular-nums w-16 text-right">16:58</div>
+        </li>
+
+        <!-- row 3: stale shimmer -->
+        <li class="row flex items-center gap-6 px-6 py-5 hover:bg-slate-50/60 transition">
+          <span class="size-2 rounded-full shrink-0 bg-slate-300"></span>
+          <div class="flex-1 min-w-0 relative">
+            <div class="flex items-baseline gap-3">
+              <span class="font-mono text-xs text-slate-500">livekit-spike</span>
+              <span class="text-[10px] uppercase tracking-[0.16em] text-slate-400">callai</span>
+            </div>
+            <div class="mt-1 text-[15px] text-slate-700 truncate">Spike LiveKit agent SDK for browser bridge</div>
+            <div class="shimmer absolute inset-x-0 -inset-y-1 rounded-md opacity-50 pointer-events-none"></div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">#livekit</span>
+            <span class="text-[11px] font-mono bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">#callai</span>
+          </div>
+          <div class="text-right shrink-0">
+            <div class="text-xs uppercase tracking-[0.14em] text-slate-500 font-medium">stale · 8d</div>
+            <div class="font-mono text-[11px] text-slate-400 mt-0.5">no activity</div>
+          </div>
+          <div class="font-mono text-xs text-slate-400 shrink-0 tabular-nums w-16 text-right">May 03</div>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Buttons + chips strip (so you can see CTA + focus ring color) -->
+  <section class="grid grid-cols-12 gap-6 items-start">
+    <div class="card col-span-12 md:col-span-7 p-10">
+      <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-3">Quick filters</div>
+      <div class="flex flex-wrap gap-2">
+        <button class="accent-bg text-white text-sm font-medium px-4 py-2 rounded-full hover:opacity-90 active:translate-y-[1px] transition">Primary action</button>
+        <button class="bg-white text-slate-900 text-sm font-medium px-4 py-2 rounded-full border border-slate-200 hover:bg-slate-50 active:translate-y-[1px] transition">Secondary</button>
+        <button class="accent-soft-bg accent-text text-sm font-medium px-4 py-2 rounded-full hover:opacity-90 transition accent-border border">Filter chip</button>
+        <input type="text" placeholder="Search tasks…" class="text-sm px-4 py-2 rounded-full bg-slate-100 border border-transparent focus:outline-none focus:bg-white focus:accent-ring focus:accent-border w-64" />
+      </div>
+      <div class="mt-8 text-xs uppercase tracking-[0.18em] text-slate-500 mb-3">Status legend</div>
+      <div class="flex flex-wrap gap-4 text-sm text-slate-600">
+        <span class="inline-flex items-center gap-2"><span class="live-dot size-2 rounded-full"></span> in flight</span>
+        <span class="inline-flex items-center gap-2"><span class="size-2 rounded-full bg-slate-400"></span> backlog</span>
+        <span class="inline-flex items-center gap-2"><span class="size-2 rounded-full bg-slate-300"></span> done</span>
+        <span class="inline-flex items-center gap-2"><span class="size-2 rounded-full bg-amber-500"></span> waiting</span>
+        <span class="inline-flex items-center gap-2"><span class="size-2 rounded-full bg-rose-500"></span> overdue</span>
+      </div>
+    </div>
+
+    <div class="card col-span-12 md:col-span-5 p-10">
+      <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-3">Waiting on</div>
+      <ul class="divide-y divide-slate-100">
+        <li class="flex items-center justify-between py-3">
+          <span class="text-sm text-slate-700">Sameer Gaikwad</span>
+          <span class="font-mono text-xs text-slate-500">1 task</span>
+        </li>
+        <li class="flex items-center justify-between py-3">
+          <span class="text-sm text-slate-700">Legal review</span>
+          <span class="font-mono text-xs text-slate-500">1 task</span>
+        </li>
+      </ul>
+      <div class="mt-6">
+        <div class="text-xs uppercase tracking-[0.18em] text-slate-500 mb-3">Tag cloud</div>
+        <div class="flex flex-wrap gap-2">
+          <span class="accent-soft-bg accent-text text-xs font-mono px-2.5 py-1 rounded-full">#flow · 2</span>
+          <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">#poc · 2</span>
+          <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">#apisix</span>
+          <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">#callqa</span>
+          <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">#deepgram</span>
+          <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">#eks</span>
+          <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">#livekit</span>
+          <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">#warp</span>
+          <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">#ui</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="pt-6 pb-12 text-xs font-mono text-slate-400 flex items-center justify-between">
+    <span>Geist · #f9fafb · zinc-slate neutrals · single accent</span>
+    <span>flick the accent at the top right ↑</span>
+  </footer>
+</main>
+
+<script>
+  const root = document.documentElement;
+  const buttons = document.querySelectorAll('.accent-btn');
+
+  function setAccent(name) {
+    root.setAttribute('data-accent', name);
+    buttons.forEach(btn => {
+      const active = btn.dataset.pick === name;
+      btn.classList.toggle('bg-white', active);
+      btn.classList.toggle('shadow-sm', active);
+      btn.classList.toggle('text-slate-900', active);
+      btn.classList.toggle('text-slate-600', !active);
+    });
+    try { localStorage.setItem('flow-ui-accent', name); } catch (_) {}
+  }
+
+  buttons.forEach(btn => btn.addEventListener('click', () => setAccent(btn.dataset.pick)));
+
+  const saved = (() => { try { return localStorage.getItem('flow-ui-accent'); } catch (_) { return null; }})();
+  setAccent(saved || 'emerald');
+</script>
+</body>
+</html>
