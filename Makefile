@@ -1,4 +1,4 @@
-.PHONY: build dev test clean ui-install ui-build go-build
+.PHONY: build dev test clean ui-install ui-build go-build smoke install
 
 # Build everything: ui first, then go binary with embedded ui/dist
 build: ui-build go-build
@@ -21,6 +21,17 @@ dev:
 
 test:
 	go test ./...
+
+smoke: build
+	./flow-ui --port 17877 --no-open & echo $$! > /tmp/flow-ui-smoke.pid
+	@sleep 1
+	@echo "--- health ---"
+	@curl -sf http://127.0.0.1:17877/api/v1/health
+	@echo "\n--- stats ---"
+	@curl -sf http://127.0.0.1:17877/api/v1/stats | head -c 200
+	@echo "\n--- tasks ---"
+	@curl -sf 'http://127.0.0.1:17877/api/v1/tasks?status=in-progress' | head -c 200
+	@kill `cat /tmp/flow-ui-smoke.pid` ; rm /tmp/flow-ui-smoke.pid
 
 clean:
 	rm -rf ui/dist ui/node_modules flow-ui
