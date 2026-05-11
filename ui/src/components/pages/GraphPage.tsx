@@ -12,7 +12,7 @@ import {
   type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import dagre from '@dagrejs/dagre';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide } from 'd3-force';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowRight, GraphIcon } from '@phosphor-icons/react';
@@ -54,22 +54,35 @@ const NODE_DIM: Record<NodeType, { w: number; h: number }> = {
 const CARD_WIDTH = 288;
 const CARD_HEIGHT_ESTIMATE = 200;
 
-function layoutDagre(nodes: Node[], edges: Edge[]): Node[] {
-  const g = new dagre.graphlib.Graph();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: 'TB', nodesep: 70, ranksep: 90, marginx: 40, marginy: 40 });
-  nodes.forEach((n) => {
-    const dim = NODE_DIM[(n.type ?? 'task') as NodeType] ?? NODE_DIM.task;
-    g.setNode(n.id, { width: dim.w, height: dim.h });
-  });
-  edges.forEach((e) => g.setEdge(e.source, e.target));
-  dagre.layout(g);
+// d3-force-based "cose-like" organic layout. Produces clustered, force-directed
+// positions instead of dagre's flat horizontal rank.
+interface SimNode { id: string; x: number; y: number; vx?: number; vy?: number; type?: string }
+interface SimLink { source: string | SimNode; target: string | SimNode }
+
+function layoutForce(nodes: Node[], edges: Edge[]): Node[] {
+  const w = 1100;
+  const h = 700;
+  const simNodes: SimNode[] = nodes.map((n, i) => ({
+    id: n.id,
+    type: n.type,
+    x: w / 2 + Math.cos((i / nodes.length) * Math.PI * 2) * 200 + (Math.random() - 0.5) * 40,
+    y: h / 2 + Math.sin((i / nodes.length) * Math.PI * 2) * 200 + (Math.random() - 0.5) * 40,
+  }));
+  const simEdges: SimLink[] = edges.map((e) => ({ source: e.source, target: e.target }));
+  const sim = forceSimulation<SimNode>(simNodes)
+    .force('link', forceLink<SimNode, SimLink>(simEdges).id((d) => d.id).distance(110).strength(0.6))
+    .force('charge', forceManyBody<SimNode>().strength(-380))
+    .force('center', forceCenter(w / 2, h / 2))
+    .force('collide', forceCollide<SimNode>().radius((d) => (d.type === 'project' ? 70 : 38)).strength(1))
+    .stop();
+  for (let i = 0; i < 300; i++) sim.tick();
+  const byId = new Map(simNodes.map((s) => [s.id, s]));
   return nodes.map((n) => {
-    const p = g.node(n.id);
-    if (!p) return n;
+    const s = byId.get(n.id);
+    if (!s) return n;
     return {
       ...n,
-      position: { x: p.x - p.width / 2, y: p.y - p.height / 2 },
+      position: { x: s.x, y: s.y },
       targetPosition: Position.Top,
       sourcePosition: Position.Bottom,
     };
@@ -194,7 +207,7 @@ function GraphInner({ graph }: { graph: G }) {
   // Initial layout + relayout on layout change.
   useEffect(() => {
     let laid: Node[];
-    if (layout === 'cose') laid = layoutDagre(initNodes, initEdges);
+    if (layout === 'cose') laid = layoutForce(initNodes, initEdges);
     else if (layout === 'grid') laid = layoutGrid(initNodes);
     else laid = layoutCircle(initNodes);
     setNodes(laid);
