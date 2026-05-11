@@ -1,169 +1,29 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import cytoscape from 'cytoscape';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ReactFlow,
+  ReactFlowProvider,
+  Background,
+  Position,
+  useNodesState,
+  useEdgesState,
+  useReactFlow,
+  type Node,
+  type Edge,
+  type Viewport,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
+import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY } from 'd3-force';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowRight } from '@phosphor-icons/react';
+import { ArrowRight, GraphIcon } from '@phosphor-icons/react';
 import type { Graph as G, Task } from '@/lib/types';
 import { api } from '@/lib/api';
 import { relative } from '@/lib/time';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { GraphIcon } from '@phosphor-icons/react';
+import { nodeTypes } from '@/components/graph/nodes';
 
 type NodeType = 'task' | 'project' | 'person' | 'tag';
 type LayoutName = 'cose' | 'grid' | 'circle';
-
-const STYLE: cytoscape.StylesheetCSS[] = [
-  {
-    selector: 'node',
-    style: {
-      'background-color': '#ffffff',
-      'border-color': '#e2e8f0',
-      'border-width': 1.5,
-      'label': 'data(label)',
-      'font-family': 'Geist Mono, ui-monospace',
-      'font-size': 10,
-      'color': '#475569',
-      'text-valign': 'center',
-      'text-halign': 'center',
-      'width': 30,
-      'height': 30,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="task"]',
-    style: {
-      'shape': 'ellipse',
-      'background-color': '#ffffff',
-      'border-color': '#10b981',
-      'border-width': 2,
-      'width': 22,
-      'height': 22,
-      'text-valign': 'bottom',
-      'text-halign': 'center',
-      'text-margin-y': 6,
-      'color': '#0f172a',
-      'font-size': 11,
-      'font-family': 'Geist Mono, ui-monospace',
-      'text-background-color': '#ffffff',
-      'text-background-opacity': 0.85,
-      'text-background-padding': '3px',
-      'text-background-shape': 'round-rectangle',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="task"][?stale]',
-    style: {
-      'border-color': '#d97706',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="task"]:selected',
-    style: {
-      'border-width': 3,
-      'width': 26,
-      'height': 26,
-      'overlay-color': '#10b981',
-      'overlay-opacity': 0.18,
-      'overlay-padding': 8,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="project"]',
-    style: {
-      'shape': 'round-rectangle',
-      'width': 100,
-      'height': 56,
-      'background-color': '#ffffff',
-      'border-color': '#cbd5e1',
-      'border-width': 1.5,
-      'color': '#0f172a',
-      'font-size': 12,
-      'font-family': 'Geist, ui-sans-serif',
-      'text-wrap': 'wrap',
-      'text-max-width': '90',
-      'line-height': 1.25,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="person"]',
-    style: {
-      'shape': 'ellipse',
-      'width': 22,
-      'height': 22,
-      'background-color': '#fef3c7',
-      'background-opacity': 0.85,
-      'border-color': '#d97706',
-      'border-opacity': 0.5,
-      'border-width': 1.5,
-      'text-valign': 'bottom',
-      'text-halign': 'center',
-      'text-margin-y': 6,
-      'color': '#78350f',
-      'font-size': 11,
-      'font-family': 'Geist, ui-sans-serif',
-      'text-background-color': '#ffffff',
-      'text-background-opacity': 0.85,
-      'text-background-padding': '3px',
-      'text-background-shape': 'round-rectangle',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="tag"]',
-    style: {
-      'shape': 'diamond',
-      'width': 20,
-      'height': 20,
-      'background-color': '#ffffff',
-      'border-color': '#10b981',
-      'border-opacity': 0.6,
-      'border-width': 1.5,
-      'text-valign': 'bottom',
-      'text-halign': 'center',
-      'text-margin-y': 6,
-      'color': '#065f46',
-      'font-size': 10,
-      'font-family': 'Geist Mono, ui-monospace',
-      'text-background-color': '#ffffff',
-      'text-background-opacity': 0.85,
-      'text-background-padding': '3px',
-      'text-background-shape': 'round-rectangle',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'edge',
-    style: {
-      'width': 1.2,
-      'line-color': '#94a3b8',
-      'line-opacity': 0.5,
-      'curve-style': 'bezier',
-      'target-arrow-shape': 'none',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'edge[kind="waiting"]',
-    style: {
-      'line-color': '#d97706',
-      'line-opacity': 0.7,
-      'line-style': 'dashed',
-      'line-dash-pattern': [6, 4],
-      'width': 1.5,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'edge[kind="tag"]',
-    style: {
-      'line-color': '#10b981',
-      'line-opacity': 0.55,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: '.faded',
-    style: {
-      'opacity': 0.12,
-      'text-opacity': 0.3,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-];
 
 const LAYER_LABELS: Record<NodeType, string> = {
   task: 'Tasks',
@@ -184,203 +44,296 @@ const STATUS_PILL: Record<Task['status'], string> = {
   done: 'bg-slate-100 text-slate-500 border-slate-200',
 };
 
+const NODE_DIM: Record<NodeType, { w: number; h: number }> = {
+  task: { w: 60, h: 44 },
+  project: { w: 120, h: 64 },
+  person: { w: 60, h: 44 },
+  tag: { w: 60, h: 44 },
+};
+
 const CARD_WIDTH = 288;
 const CARD_HEIGHT_ESTIMATE = 200;
 
-export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<cytoscape.Core | null>(null);
-  const selectedSlugRef = useRef<string | null>(null);
-  const focusedRef = useRef<string | null>(null);
+// d3-force-based "cose-like" organic layout. Produces clustered, force-directed
+// positions instead of dagre's flat horizontal rank.
+interface SimNode { id: string; x: number; y: number; vx?: number; vy?: number; type?: string }
+interface SimLink { source: string | SimNode; target: string | SimNode }
 
-  const [layout, setLayout] = useState<LayoutName>('cose');
-  const [visible, setVisible] = useState<Record<NodeType, boolean>>({ task: true, project: true, person: true, tag: true });
+function layoutForce(nodes: Node[], edges: Edge[]): Node[] {
+  const w = 600;
+  const h = 400;
+  const simNodes: SimNode[] = nodes.map((n, i) => ({
+    id: n.id,
+    type: n.type,
+    x: w / 2 + Math.cos((i / nodes.length) * Math.PI * 2) * 80 + (Math.random() - 0.5) * 20,
+    y: h / 2 + Math.sin((i / nodes.length) * Math.PI * 2) * 80 + (Math.random() - 0.5) * 20,
+  }));
+  const simEdges: SimLink[] = edges.map((e) => ({ source: e.source, target: e.target }));
+  const sim = forceSimulation<SimNode>(simNodes)
+    .force('link', forceLink<SimNode, SimLink>(simEdges).id((d) => d.id).distance(70).strength(0.7))
+    .force('charge', forceManyBody<SimNode>().strength(-160))
+    .force('center', forceCenter(w / 2, h / 2))
+    .force('x', forceX<SimNode>(w / 2).strength(0.09))
+    .force('y', forceY<SimNode>(h / 2).strength(0.11))
+    .force('collide', forceCollide<SimNode>().radius((d) => (d.type === 'project' ? 58 : 24)).strength(0.95))
+    .stop();
+  for (let i = 0; i < 400; i++) sim.tick();
+  const byId = new Map(simNodes.map((s) => [s.id, s]));
+  return nodes.map((n) => {
+    const s = byId.get(n.id);
+    if (!s) return n;
+    return {
+      ...n,
+      position: { x: s.x, y: s.y },
+      targetPosition: Position.Top,
+      sourcePosition: Position.Bottom,
+    };
+  });
+}
+
+function layoutGrid(nodes: Node[]): Node[] {
+  const colsByType: Record<NodeType, number> = { project: 0, task: 1, person: 2, tag: 3 };
+  const buckets: Record<NodeType, Node[]> = { task: [], project: [], person: [], tag: [] };
+  nodes.forEach((n) => buckets[(n.type as NodeType) ?? 'task'].push(n));
+  const colW = 220;
+  const rowH = 90;
+  const placed: Node[] = [];
+  (Object.keys(buckets) as NodeType[]).forEach((t) => {
+    const col = colsByType[t];
+    buckets[t].forEach((n, i) => {
+      placed.push({
+        ...n,
+        position: { x: col * colW, y: i * rowH },
+        targetPosition: Position.Top,
+        sourcePosition: Position.Bottom,
+      });
+    });
+  });
+  return placed;
+}
+
+function layoutCircle(nodes: Node[]): Node[] {
+  const r = Math.max(220, nodes.length * 22);
+  const cx = r;
+  const cy = r;
+  return nodes.map((n, i) => {
+    const a = (i / nodes.length) * Math.PI * 2;
+    return {
+      ...n,
+      position: { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r },
+      targetPosition: Position.Top,
+      sourcePosition: Position.Bottom,
+    };
+  });
+}
+
+function buildElements(graph: G): { nodes: Node[]; edges: Edge[]; projectCounts: Record<string, number> } {
+  const projectCounts: Record<string, number> = {};
+  graph.edges.forEach((e) => {
+    if (e.kind === 'membership') projectCounts[e.target] = (projectCounts[e.target] ?? 0) + 1;
+  });
+  const nodes: Node[] = graph.nodes.map((n) => {
+    const base = {
+      id: n.id,
+      type: n.type,
+      position: { x: 0, y: 0 },
+      data: {} as Record<string, unknown>,
+      targetPosition: Position.Top,
+      sourcePosition: Position.Bottom,
+      draggable: true,
+    } as Node;
+    if (n.type === 'project') {
+      base.data = { label: n.label, count: projectCounts[n.id] ?? 0 };
+    } else if (n.type === 'task') {
+      const stale = !!(n.meta && (n.meta as { stale?: boolean }).stale);
+      base.data = { label: n.label, stale };
+    } else {
+      base.data = { label: n.label };
+    }
+    return base;
+  });
+  const edges: Edge[] = graph.edges.map((e, i) => {
+    const baseStyle: React.CSSProperties =
+      e.kind === 'waiting'
+        ? { stroke: '#d97706', strokeDasharray: '6 4', strokeWidth: 1.5, opacity: 0.85 }
+        : e.kind === 'tag'
+        ? { stroke: '#10b981', strokeOpacity: 0.55, strokeWidth: 1.2 }
+        : { stroke: '#94a3b8', strokeOpacity: 0.5, strokeWidth: 1.2 };
+    return {
+      id: `e${i}`,
+      source: e.source,
+      target: e.target,
+      type: 'default',
+      data: { kind: e.kind },
+      style: baseStyle,
+    };
+  });
+  return { nodes, edges, projectCounts };
+}
+
+function computeFocusSet(graph: G, focusedProjectId: string | null): Set<string> | null {
+  if (!focusedProjectId) return null;
+  const set = new Set<string>([focusedProjectId]);
+  // 1-hop: project + membership-connected tasks
+  graph.edges.forEach((e) => {
+    if (e.kind === 'membership' && (e.source === focusedProjectId || e.target === focusedProjectId)) {
+      set.add(e.source === focusedProjectId ? e.target : e.source);
+    }
+  });
+  // 1-hop from those tasks: any neighbor (waiting persons, tags, assignees)
+  graph.edges.forEach((e) => {
+    if (set.has(e.source)) set.add(e.target);
+    if (set.has(e.target)) set.add(e.source);
+  });
+  return set;
+}
+
+function GraphInner({ graph }: { graph: G }) {
+  const { nodes: initNodes, edges: initEdges } = useMemo(() => buildElements(graph), [graph]);
+
+  const [layout, setLayout] = useState<LayoutName>('grid');
+  const [visible, setVisible] = useState<Record<NodeType, boolean>>({
+    task: true,
+    project: true,
+    person: true,
+    tag: true,
+  });
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
+
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const { flowToScreenPosition, getNode } = useReactFlow();
   const [cardPos, setCardPos] = useState<{ x: number; y: number } | null>(null);
+
+  // Initial layout + relayout on layout change.
+  useEffect(() => {
+    let laid: Node[];
+    if (layout === 'cose') laid = layoutForce(initNodes, initEdges);
+    else if (layout === 'grid') laid = layoutGrid(initNodes);
+    else laid = layoutCircle(initNodes);
+    setNodes(laid);
+    setEdges(initEdges);
+  }, [layout, initNodes, initEdges, setNodes, setEdges]);
 
   const tasksQ = useQuery({ queryKey: ['tasks-all'], queryFn: () => api.tasks({}) });
   const tasksBySlug = useMemo(() => {
     const m = new Map<string, Task>();
-    tasksQ.data?.tasks.forEach(t => m.set(t.slug, t));
+    tasksQ.data?.tasks.forEach((t) => m.set(t.slug, t));
     return m;
   }, [tasksQ.data]);
 
   const layerCounts = useMemo(() => {
     const c: Record<NodeType, number> = { task: 0, project: 0, person: 0, tag: 0 };
-    graph?.nodes.forEach(n => { c[n.type]++; });
+    graph.nodes.forEach((n) => {
+      c[n.type]++;
+    });
     return c;
   }, [graph]);
 
-  const projectTaskCount = useMemo(() => {
-    const counts: Record<string, number> = {};
-    graph?.edges.forEach(e => {
-      if (e.kind === 'membership') counts[e.target] = (counts[e.target] ?? 0) + 1;
-    });
-    return counts;
-  }, [graph]);
+  // Compute focus set (set of node ids that stay full opacity).
+  const focusSet = useMemo(
+    () => computeFocusSet(graph, focusedProjectId),
+    [graph, focusedProjectId]
+  );
 
-  useEffect(() => { selectedSlugRef.current = selectedSlug; }, [selectedSlug]);
+  // Apply visibility filtering + fade flag based on focus mode.
+  const visibleNodes = useMemo(
+    () =>
+      nodes
+        .filter((n) => visible[(n.type as NodeType) ?? 'task'])
+        .map((n) => {
+          const faded = focusSet ? !focusSet.has(n.id) : false;
+          const prev = (n.data ?? {}) as Record<string, unknown>;
+          if ((prev.faded as boolean | undefined) === faded) return n;
+          return { ...n, data: { ...prev, faded } };
+        }),
+    [nodes, visible, focusSet]
+  );
+  const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
+  const visibleEdges = useMemo(
+    () =>
+      edges
+        .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+        .map((e) => {
+          if (!focusSet) return e;
+          const bothIn = focusSet.has(e.source) && focusSet.has(e.target);
+          const baseStyle = e.style ?? {};
+          return {
+            ...e,
+            style: { ...baseStyle, opacity: bothIn ? (baseStyle.opacity ?? 1) : 0.08 },
+          };
+        }),
+    [edges, visibleIds, focusSet]
+  );
+
+  // Re-position the detail card based on selected task's screen position.
+  const updateCardPos = useCallback(() => {
+    if (!selectedSlug) {
+      setCardPos(null);
+      return;
+    }
+    const id = `task:${selectedSlug}`;
+    const n = getNode(id);
+    if (!n) {
+      setCardPos(null);
+      return;
+    }
+    // Node center in flow coordinates.
+    const dim = NODE_DIM.task;
+    const center = { x: n.position.x + dim.w / 2, y: n.position.y + 12 };
+    const screen = flowToScreenPosition(center);
+    setCardPos(screen);
+  }, [selectedSlug, getNode, flowToScreenPosition]);
 
   useEffect(() => {
-    if (!containerRef.current || !graph || graph.nodes.length === 0) return;
+    updateCardPos();
+  }, [updateCardPos, nodes]);
 
-    const elements: cytoscape.ElementDefinition[] = [
-      ...graph.nodes.map(n => {
-        let label = n.label;
-        if (n.type === 'project') {
-          const c = projectTaskCount[n.id] ?? 0;
-          label = `${n.label}\n${c} ${c === 1 ? 'task' : 'tasks'}`;
-        } else if (n.type === 'person' && label.length > 16) {
-          label = label.slice(0, 14) + '…';
-        }
-        return { data: { id: n.id, label, type: n.type, ...(n.meta ?? {}) } };
-      }),
-      ...graph.edges.map((e, i) => ({ data: { id: `e${i}`, source: e.source, target: e.target, kind: e.kind } })),
-    ];
+  const onMove = useCallback(
+    (_e: unknown, _v: Viewport) => {
+      updateCardPos();
+    },
+    [updateCardPos]
+  );
 
-    const cy = cytoscape({
-      container: containerRef.current,
-      elements,
-      style: STYLE,
-      layout: {
-        name: 'cose',
-        animate: true,
-        padding: 60,
-        idealEdgeLength: 110,
-        nodeRepulsion: 8000,
-        nodeOverlap: 24,
-        componentSpacing: 80,
-      } as cytoscape.LayoutOptions,
-      autoungrabify: false,
-    });
-    cyRef.current = cy;
-
-    cy.one('layoutstop', () => {
-      // Leave space for the right-side LAYERS panel (~320px) and a bit on the other edges.
-      cy.fit(undefined, 60);
-      cy.panBy({ x: -140, y: 0 });
-    });
-
-    const onTapTask = (evt: cytoscape.EventObject) => {
-      const node = evt.target;
-      const slug = String(node.id()).replace(/^task:/, '');
-      const p = node.renderedPosition();
-      cy.elements().unselect();
-      node.select();
-      setSelectedSlug(slug);
-      setCardPos({ x: p.x, y: p.y });
-    };
-    const onTapProject = (evt: cytoscape.EventObject) => {
-      const projectNode = evt.target;
-      const id = String(projectNode.id());
-      // Toggle off if same project clicked again
-      if (focusedRef.current === id) {
-        cy.elements().removeClass('faded');
-        focusedRef.current = null;
-        return;
-      }
-      // Membership edges: source=task, target=project — tasks are incomers of project
-      const tasks = projectNode.incomers('edge[kind="membership"]').sources();
-      const tasksNeighborhood = tasks.openNeighborhood();
-      const focus = projectNode
-        .union(tasks)
-        .union(tasksNeighborhood)
-        .union(projectNode.connectedEdges())
-        .union(tasks.connectedEdges());
-      cy.elements().addClass('faded');
-      focus.removeClass('faded');
-      focusedRef.current = id;
-    };
-    const onTapBg = (evt: cytoscape.EventObject) => {
-      if (evt.target === cy) {
-        cy.elements().unselect();
-        cy.elements().removeClass('faded');
-        focusedRef.current = null;
+  const onNodeClick = useCallback(
+    (_e: React.MouseEvent, n: Node) => {
+      if (n.type === 'project') {
+        setFocusedProjectId((prev) => (prev === n.id ? null : n.id));
         setSelectedSlug(null);
         setCardPos(null);
+        return;
       }
-    };
-    const onViewport = () => {
-      const slug = selectedSlugRef.current;
-      if (!slug) return;
-      const n = cy.$id(`task:${slug}`);
-      if (n.nonempty()) {
-        const p = n.renderedPosition();
-        setCardPos({ x: p.x, y: p.y });
-      }
-    };
+      if (n.type !== 'task') return;
+      const slug = n.id.replace(/^task:/, '');
+      setSelectedSlug(slug);
+    },
+    []
+  );
 
-    cy.on('tap', 'node[type="task"]', onTapTask);
-    cy.on('tap', 'node[type="project"]', onTapProject);
-    cy.on('tap', onTapBg);
-    // Expose for testing
-    (window as unknown as { __cy?: cytoscape.Core }).__cy = cy;
-    cy.on('pan zoom', onViewport);
-    cy.on('position', 'node', (evt) => {
-      const slug = selectedSlugRef.current;
-      if (!slug) return;
-      if (String(evt.target.id()) !== `task:${slug}`) return;
-      const p = evt.target.renderedPosition();
-      setCardPos({ x: p.x, y: p.y });
-    });
+  const onPaneClick = useCallback(() => {
+    setSelectedSlug(null);
+    setCardPos(null);
+    setFocusedProjectId(null);
+  }, []);
 
-    return () => {
-      cy.destroy();
-      cyRef.current = null;
-    };
-  }, [graph, projectTaskCount]);
-
-  // Layout switcher
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    const opts: cytoscape.LayoutOptions = layout === 'cose'
-      ? ({ name: 'cose', animate: true, padding: 60, idealEdgeLength: 110, nodeRepulsion: 8000, nodeOverlap: 24, componentSpacing: 80 } as cytoscape.LayoutOptions)
-      : ({ name: layout, animate: true, padding: 60 } as cytoscape.LayoutOptions);
-    const l = cy.layout(opts);
-    l.one('layoutstop', () => { cy.fit(undefined, 60); cy.panBy({ x: -140, y: 0 }); });
-    l.run();
-  }, [layout]);
-
-  // Visibility toggles
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.batch(() => {
-      (Object.keys(visible) as NodeType[]).forEach(type => {
-        cy.nodes(`[type="${type}"]`).style('display', visible[type] ? 'element' : 'none');
-      });
-    });
-  }, [visible]);
-
-  const toggleLayer = (type: NodeType) => setVisible(v => ({ ...v, [type]: !v[type] }));
-
-  if (loading) return <div className="p-12 text-slate-400">Loading graph…</div>;
-  if (!graph || graph.nodes.length === 0) {
-    return (
-      <div className="max-w-[800px] mx-auto px-10 py-24">
-        <EmptyState
-          title="No graph yet"
-          body="Create a task or project, attach a tag, or set a waiting_on note — the graph fills in as your work grows."
-          icon={<GraphIcon size={48} weight="regular" className="text-slate-300" />}
-        />
-      </div>
-    );
-  }
+  const toggleLayer = (type: NodeType) => setVisible((v) => ({ ...v, [type]: !v[type] }));
 
   const selectedTask = selectedSlug ? tasksBySlug.get(selectedSlug) : undefined;
-  const container = containerRef.current;
-  const containerW = container?.clientWidth ?? 1200;
-  const containerH = container?.clientHeight ?? 700;
 
+  // Adjust card to viewport bounds + container.
   let cardLeft = 0;
   let cardTop = 0;
   let cardReady = false;
-  if (cardPos) {
+  if (cardPos && selectedTask) {
+    // cardPos is in screen coordinates. We want it relative to the page root.
     cardLeft = cardPos.x - 28;
     cardTop = cardPos.y - 12;
-    if (cardLeft + CARD_WIDTH > containerW - 24) cardLeft = cardPos.x - CARD_WIDTH + 28;
-    if (cardTop + CARD_HEIGHT_ESTIMATE > containerH - 24) cardTop = cardPos.y - CARD_HEIGHT_ESTIMATE + 12;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (cardLeft + CARD_WIDTH > w - 24) cardLeft = cardPos.x - CARD_WIDTH + 28;
+    if (cardTop + CARD_HEIGHT_ESTIMATE > h - 24) cardTop = cardPos.y - CARD_HEIGHT_ESTIMATE + 12;
     if (cardLeft < 24) cardLeft = 24;
     if (cardTop < 24) cardTop = 24;
     cardReady = true;
@@ -389,14 +342,40 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
   return (
     <div
       className="relative h-[calc(100dvh-57px)] overflow-hidden"
-      style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgb(148 163 184 / 0.18) 1px, transparent 0)', backgroundSize: '28px 28px' }}
+      style={{
+        backgroundImage:
+          'radial-gradient(circle at 1px 1px, rgb(148 163 184 / 0.18) 1px, transparent 0)',
+        backgroundSize: '28px 28px',
+      }}
     >
-      <div ref={containerRef} className="absolute inset-0" style={{ position: 'absolute', inset: 0 }} />
+      <ReactFlow
+        nodes={visibleNodes}
+        edges={visibleEdges}
+        nodeTypes={nodeTypes}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onNodeClick={onNodeClick}
+        onPaneClick={onPaneClick}
+        onMove={onMove}
+        fitView
+        fitViewOptions={{ padding: 0.05, maxZoom: 1.4, minZoom: 0.6 }}
+        panOnDrag
+        zoomOnScroll
+        nodesDraggable
+        nodesConnectable={false}
+        elementsSelectable
+        proOptions={{ hideAttribution: true }}
+        defaultEdgeOptions={{ type: 'default' }}
+      >
+        <Background gap={28} size={1} color="#94a3b8" />
+      </ReactFlow>
 
       {/* Top-left counts */}
       <div className="absolute top-6 left-6 font-mono text-xs text-slate-500 pointer-events-none">
         <div className="text-slate-700 font-medium tracking-tight text-base">Graph</div>
-        <div className="mt-1">{graph.nodes.length} nodes · {graph.edges.length} edges · {layout}</div>
+        <div className="mt-1">
+          {graph.nodes.length} nodes · {graph.edges.length} edges · {layout}
+        </div>
       </div>
 
       {/* Right-side LAYERS + LAYOUT panel */}
@@ -406,11 +385,13 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
       >
         <div className="text-[11px] uppercase tracking-[0.22em] text-slate-600 mb-4">Layers</div>
         <ul className="space-y-2.5 text-sm">
-          {(Object.keys(LAYER_LABELS) as NodeType[]).map(type => (
+          {(Object.keys(LAYER_LABELS) as NodeType[]).map((type) => (
             <li key={type}>
               <button
                 onClick={() => toggleLayer(type)}
-                className={`w-full flex items-center justify-between py-0.5 transition-opacity ${visible[type] ? '' : 'opacity-40'}`}
+                className={`w-full flex items-center justify-between py-0.5 transition-opacity ${
+                  visible[type] ? '' : 'opacity-40'
+                }`}
               >
                 <span className="flex items-center gap-2.5 text-slate-700">
                   <LayerSwatch type={type} />
@@ -424,12 +405,14 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
         <div className="mt-5 pt-4 border-t border-slate-200/60">
           <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500 mb-2">Layout</div>
           <div className="flex items-center gap-1 p-0.5 rounded-full bg-slate-100/70 text-[12px]">
-            {(['cose', 'grid', 'circle'] as LayoutName[]).map(name => (
+            {(['cose', 'grid', 'circle'] as LayoutName[]).map((name) => (
               <button
                 key={name}
                 onClick={() => setLayout(name)}
                 className={`flex-1 px-3 py-1 rounded-full transition-colors ${
-                  layout === name ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  layout === name
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 {name}
@@ -441,10 +424,18 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
 
       {/* Bottom-left legend */}
       <div className="absolute bottom-6 left-6 rounded-2xl bg-white border border-slate-200/70 px-4 py-3 flex items-center gap-5 text-xs">
-        <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />task</span>
-        <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400" />project</span>
-        <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" />person</span>
-        <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rotate-45 border border-emerald-500 bg-white" />tag</span>
+        <span className="inline-flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />task
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-sm bg-slate-400" />project
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />person
+        </span>
+        <span className="inline-flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rotate-45 border border-emerald-500 bg-white" />tag
+        </span>
       </div>
 
       {/* Detail card */}
@@ -460,21 +451,38 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
         >
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="min-w-0">
-              <div className="font-mono text-[12px] text-emerald-700 font-medium truncate">{selectedTask.slug}</div>
+              <div className="font-mono text-[12px] text-emerald-700 font-medium truncate">
+                {selectedTask.slug}
+              </div>
               <div className="text-[14px] text-slate-900 leading-tight mt-1">{selectedTask.name}</div>
             </div>
-            <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full border ${STATUS_PILL[selectedTask.status]}`}>
+            <span
+              className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full border ${STATUS_PILL[selectedTask.status]}`}
+            >
               {STATUS_LABEL[selectedTask.status]}
             </span>
           </div>
           <div className="space-y-1.5 text-[12px]">
             {selectedTask.project_slug && (
-              <div className="flex justify-between gap-3"><span className="text-slate-500 shrink-0">project</span><span className="text-slate-800 text-right">{selectedTask.project_slug}</span></div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500 shrink-0">project</span>
+                <span className="text-slate-800 text-right">{selectedTask.project_slug}</span>
+              </div>
             )}
             {selectedTask.waiting_on && (
-              <div className="flex justify-between gap-3"><span className="text-slate-500 shrink-0">waiting</span><span className="text-amber-700 text-right break-words min-w-0">{selectedTask.waiting_on}</span></div>
+              <div className="flex justify-between gap-3">
+                <span className="text-slate-500 shrink-0">waiting</span>
+                <span className="text-amber-700 text-right break-words min-w-0">
+                  {selectedTask.waiting_on}
+                </span>
+              </div>
             )}
-            <div className="flex justify-between gap-3"><span className="text-slate-500 shrink-0">updated</span><span className="font-mono text-slate-700 text-right">{relative(selectedTask.updated_at)}</span></div>
+            <div className="flex justify-between gap-3">
+              <span className="text-slate-500 shrink-0">updated</span>
+              <span className="font-mono text-slate-700 text-right">
+                {relative(selectedTask.updated_at)}
+              </span>
+            </div>
           </div>
           <Link
             to="/tasks/$slug"
@@ -486,6 +494,26 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
         </div>
       )}
     </div>
+  );
+}
+
+export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
+  if (loading) return <div className="p-12 text-slate-400">Loading graph…</div>;
+  if (!graph || graph.nodes.length === 0) {
+    return (
+      <div className="max-w-[800px] mx-auto px-10 py-24">
+        <EmptyState
+          title="No graph yet"
+          body="Create a task or project, attach a tag, or set a waiting_on note — the graph fills in as your work grows."
+          icon={<GraphIcon size={48} weight="regular" className="text-slate-300" />}
+        />
+      </div>
+    );
+  }
+  return (
+    <ReactFlowProvider>
+      <GraphInner graph={graph} />
+    </ReactFlowProvider>
   );
 }
 
