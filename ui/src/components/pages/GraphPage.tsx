@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, useCallback } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { GraphCanvas, lightTheme, type GraphCanvasRef, type GraphNode as RGNode, type GraphEdge as RGEdge } from 'reagraph';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -55,6 +55,12 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
   const [visible, setVisible] = useState<Record<NodeType, boolean>>({ task: true, project: true, person: true, tag: true });
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [cardPos, setCardPos] = useState<{ x: number; y: number } | null>(null);
+  const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
+
+  // Test-only: expose focus setter on window so e2e/screenshot scripts can drive focus mode.
+  useEffect(() => {
+    (window as unknown as { __setFocus?: (id: string | null) => void }).__setFocus = setFocusedProjectId;
+  }, []);
 
   const tasksQ = useQuery({ queryKey: ['tasks-all'], queryFn: () => api.tasks({}) });
   const tasksBySlug = useMemo(() => {
@@ -77,6 +83,30 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
     return counts;
   }, [graph]);
 
+  // Compute the set of node IDs in focus when a project is anchored.
+  // Includes: the project, all tasks linked via 'membership', and 1-hop neighbors of those tasks
+  // (waiting_on persons, tags, assignees).
+  const focusSet = useMemo(() => {
+    if (!focusedProjectId || !graph) return null;
+    const set = new Set<string>([focusedProjectId]);
+    graph.edges.forEach(e => {
+      if (e.kind === 'membership' && (e.source === focusedProjectId || e.target === focusedProjectId)) {
+        const taskId = e.source === focusedProjectId ? e.target : e.source;
+        set.add(taskId);
+      }
+    });
+    // 1-hop from those tasks (and the project itself)
+    const seeded = new Set(set);
+    graph.edges.forEach(e => {
+      if (seeded.has(e.source)) set.add(e.target);
+      if (seeded.has(e.target)) set.add(e.source);
+    });
+    return set;
+  }, [focusedProjectId, graph]);
+
+  const DIM_FILL = '#e2e8f0';
+  const DIM_EDGE = '#f1f5f9';
+
   const { rgNodes, rgEdges } = useMemo(() => {
     const nodes: RGNode[] = [];
     const edges: RGEdge[] = [];
@@ -93,23 +123,28 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
       } else if (n.type === 'person' && label.length > 16) {
         label = label.slice(0, 14) + '…';
       }
+      const inFocus = !focusSet || focusSet.has(n.id);
       nodes.push({
         id: n.id,
         label,
-        fill: TYPE_FILL[n.type],
-        size: TYPE_SIZE[n.type],
+        fill: inFocus ? TYPE_FILL[n.type] : DIM_FILL,
+        size: inFocus ? TYPE_SIZE[n.type] : TYPE_SIZE[n.type] * 0.6,
         data: { type: n.type, ...(n.meta ?? {}) },
       });
     }
     let i = 0;
     for (const e of graph.edges) {
       if (!visibleIds.has(e.source) || !visibleIds.has(e.target)) { i++; continue; }
+      const edgeInFocus = !focusSet || (focusSet.has(e.source) && focusSet.has(e.target));
       const eg: RGEdge = {
         id: `e${i++}`,
         source: e.source,
         target: e.target,
       };
-      if (e.kind === 'waiting') {
+      if (!edgeInFocus) {
+        eg.fill = DIM_EDGE;
+        eg.size = 0.5;
+      } else if (e.kind === 'waiting') {
         eg.fill = '#d97706';
         eg.size = 1.5;
       } else if (e.kind === 'tag') {
@@ -122,10 +157,16 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
       edges.push(eg);
     }
     return { rgNodes: nodes, rgEdges: edges };
-  }, [graph, visible, projectTaskCount]);
+  }, [graph, visible, projectTaskCount, focusSet]);
 
   const onNodeClick = useCallback((node: { id: string; data?: unknown }, _props?: unknown, event?: { nativeEvent?: MouseEvent; clientX?: number; clientY?: number }) => {
     const type = (node.data as { type?: NodeType } | undefined)?.type;
+    if (type === 'project') {
+      setFocusedProjectId(prev => (prev === node.id ? null : node.id));
+      setSelectedSlug(null);
+      setCardPos(null);
+      return;
+    }
     if (type !== 'task') return;
     const slug = String(node.id).replace(/^task:/, '');
     setSelectedSlug(slug);
@@ -149,6 +190,7 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
   const onCanvasClick = useCallback(() => {
     setSelectedSlug(null);
     setCardPos(null);
+    setFocusedProjectId(null);
   }, []);
 
   const toggleLayer = (type: NodeType) => setVisible(v => ({ ...v, [type]: !v[type] }));
