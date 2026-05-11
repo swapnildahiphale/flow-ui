@@ -1,162 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import cytoscape from 'cytoscape';
+import { useMemo, useRef, useState, useCallback } from 'react';
+import { GraphCanvas, lightTheme, type GraphCanvasRef, type GraphNode as RGNode, type GraphEdge as RGEdge } from 'reagraph';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { ArrowRight } from '@phosphor-icons/react';
+import { ArrowRight, GraphIcon } from '@phosphor-icons/react';
 import type { Graph as G, Task } from '@/lib/types';
 import { api } from '@/lib/api';
 import { relative } from '@/lib/time';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { GraphIcon } from '@phosphor-icons/react';
 
 type NodeType = 'task' | 'project' | 'person' | 'tag';
-type LayoutName = 'cose' | 'grid' | 'circle';
-
-const STYLE: cytoscape.StylesheetCSS[] = [
-  {
-    selector: 'node',
-    style: {
-      'background-color': '#ffffff',
-      'border-color': '#e2e8f0',
-      'border-width': 1.5,
-      'label': 'data(label)',
-      'font-family': 'Geist Mono, ui-monospace',
-      'font-size': 10,
-      'color': '#475569',
-      'text-valign': 'center',
-      'text-halign': 'center',
-      'width': 30,
-      'height': 30,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="task"]',
-    style: {
-      'shape': 'ellipse',
-      'background-color': '#ffffff',
-      'border-color': '#10b981',
-      'border-width': 2,
-      'width': 22,
-      'height': 22,
-      'text-valign': 'bottom',
-      'text-halign': 'center',
-      'text-margin-y': 6,
-      'color': '#0f172a',
-      'font-size': 11,
-      'font-family': 'Geist Mono, ui-monospace',
-      'text-background-color': '#ffffff',
-      'text-background-opacity': 0.85,
-      'text-background-padding': '3px',
-      'text-background-shape': 'round-rectangle',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="task"][?stale]',
-    style: {
-      'border-color': '#d97706',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="task"]:selected',
-    style: {
-      'border-width': 3,
-      'width': 26,
-      'height': 26,
-      'overlay-color': '#10b981',
-      'overlay-opacity': 0.18,
-      'overlay-padding': 8,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="project"]',
-    style: {
-      'shape': 'round-rectangle',
-      'width': 100,
-      'height': 56,
-      'background-color': '#ffffff',
-      'border-color': '#cbd5e1',
-      'border-width': 1.5,
-      'color': '#0f172a',
-      'font-size': 12,
-      'font-family': 'Geist, ui-sans-serif',
-      'text-wrap': 'wrap',
-      'text-max-width': '90',
-      'line-height': 1.25,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="person"]',
-    style: {
-      'shape': 'ellipse',
-      'width': 22,
-      'height': 22,
-      'background-color': '#fef3c7',
-      'background-opacity': 0.85,
-      'border-color': '#d97706',
-      'border-opacity': 0.5,
-      'border-width': 1.5,
-      'text-valign': 'bottom',
-      'text-halign': 'center',
-      'text-margin-y': 6,
-      'color': '#78350f',
-      'font-size': 11,
-      'font-family': 'Geist, ui-sans-serif',
-      'text-background-color': '#ffffff',
-      'text-background-opacity': 0.85,
-      'text-background-padding': '3px',
-      'text-background-shape': 'round-rectangle',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'node[type="tag"]',
-    style: {
-      'shape': 'diamond',
-      'width': 20,
-      'height': 20,
-      'background-color': '#ffffff',
-      'border-color': '#10b981',
-      'border-opacity': 0.6,
-      'border-width': 1.5,
-      'text-valign': 'bottom',
-      'text-halign': 'center',
-      'text-margin-y': 6,
-      'color': '#065f46',
-      'font-size': 10,
-      'font-family': 'Geist Mono, ui-monospace',
-      'text-background-color': '#ffffff',
-      'text-background-opacity': 0.85,
-      'text-background-padding': '3px',
-      'text-background-shape': 'round-rectangle',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'edge',
-    style: {
-      'width': 1.2,
-      'line-color': '#94a3b8',
-      'line-opacity': 0.5,
-      'curve-style': 'bezier',
-      'target-arrow-shape': 'none',
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'edge[kind="waiting"]',
-    style: {
-      'line-color': '#d97706',
-      'line-opacity': 0.7,
-      'line-style': 'dashed',
-      'line-dash-pattern': [6, 4],
-      'width': 1.5,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-  {
-    selector: 'edge[kind="tag"]',
-    style: {
-      'line-color': '#10b981',
-      'line-opacity': 0.55,
-    },
-  } as unknown as cytoscape.StylesheetCSS,
-];
+type LayoutName = 'forceDirected2d' | 'radialOut2d' | 'circular2d';
 
 const LAYER_LABELS: Record<NodeType, string> = {
   task: 'Tasks',
@@ -177,15 +30,28 @@ const STATUS_PILL: Record<Task['status'], string> = {
   done: 'bg-slate-100 text-slate-500 border-slate-200',
 };
 
+const TYPE_FILL: Record<NodeType, string> = {
+  task: '#10b981',     // emerald-500
+  project: '#94a3b8',  // slate-400
+  person: '#f59e0b',   // amber-500
+  tag: '#34d399',      // emerald-400 (smaller, slightly lighter)
+};
+
+const TYPE_SIZE: Record<NodeType, number> = {
+  task: 9,
+  project: 16,
+  person: 8,
+  tag: 6,
+};
+
 const CARD_WIDTH = 288;
 const CARD_HEIGHT_ESTIMATE = 200;
 
 export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const cyRef = useRef<cytoscape.Core | null>(null);
-  const selectedSlugRef = useRef<string | null>(null);
+  const canvasRef = useRef<GraphCanvasRef | null>(null);
 
-  const [layout, setLayout] = useState<LayoutName>('cose');
+  const [layout, setLayout] = useState<LayoutName>('forceDirected2d');
   const [visible, setVisible] = useState<Record<NodeType, boolean>>({ task: true, project: true, person: true, tag: true });
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [cardPos, setCardPos] = useState<{ x: number; y: number } | null>(null);
@@ -211,114 +77,79 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
     return counts;
   }, [graph]);
 
-  useEffect(() => { selectedSlugRef.current = selectedSlug; }, [selectedSlug]);
+  const { rgNodes, rgEdges } = useMemo(() => {
+    const nodes: RGNode[] = [];
+    const edges: RGEdge[] = [];
+    if (!graph) return { rgNodes: nodes, rgEdges: edges };
 
-  useEffect(() => {
-    if (!containerRef.current || !graph || graph.nodes.length === 0) return;
-
-    const elements: cytoscape.ElementDefinition[] = [
-      ...graph.nodes.map(n => {
-        let label = n.label;
-        if (n.type === 'project') {
-          const c = projectTaskCount[n.id] ?? 0;
-          label = `${n.label}\n${c} ${c === 1 ? 'task' : 'tasks'}`;
-        } else if (n.type === 'person' && label.length > 16) {
-          label = label.slice(0, 14) + '…';
-        }
-        return { data: { id: n.id, label, type: n.type, ...(n.meta ?? {}) } };
-      }),
-      ...graph.edges.map((e, i) => ({ data: { id: `e${i}`, source: e.source, target: e.target, kind: e.kind } })),
-    ];
-
-    const cy = cytoscape({
-      container: containerRef.current,
-      elements,
-      style: STYLE,
-      layout: {
-        name: 'cose',
-        animate: true,
-        padding: 60,
-        idealEdgeLength: 110,
-        nodeRepulsion: 8000,
-        nodeOverlap: 24,
-        componentSpacing: 80,
-      } as cytoscape.LayoutOptions,
-      autoungrabify: false,
-    });
-    cyRef.current = cy;
-
-    cy.one('layoutstop', () => {
-      // Leave space for the right-side LAYERS panel (~320px) and a bit on the other edges.
-      cy.fit(undefined, 60);
-      cy.panBy({ x: -140, y: 0 });
-    });
-
-    const onTapNode = (evt: cytoscape.EventObject) => {
-      const node = evt.target;
-      if (node.data('type') !== 'task') return;
-      const slug = String(node.id()).replace(/^task:/, '');
-      const p = node.renderedPosition();
-      cy.elements().unselect();
-      node.select();
-      setSelectedSlug(slug);
-      setCardPos({ x: p.x, y: p.y });
-    };
-    const onTapBg = (evt: cytoscape.EventObject) => {
-      if (evt.target === cy) {
-        cy.elements().unselect();
-        setSelectedSlug(null);
-        setCardPos(null);
+    const visibleIds = new Set<string>();
+    for (const n of graph.nodes) {
+      if (!visible[n.type]) continue;
+      visibleIds.add(n.id);
+      let label = n.label;
+      if (n.type === 'project') {
+        const c = projectTaskCount[n.id] ?? 0;
+        label = `${n.label} · ${c} ${c === 1 ? 'task' : 'tasks'}`;
+      } else if (n.type === 'person' && label.length > 16) {
+        label = label.slice(0, 14) + '…';
       }
-    };
-    const onViewport = () => {
-      const slug = selectedSlugRef.current;
-      if (!slug) return;
-      const n = cy.$id(`task:${slug}`);
-      if (n.nonempty()) {
-        const p = n.renderedPosition();
-        setCardPos({ x: p.x, y: p.y });
-      }
-    };
-
-    cy.on('tap', 'node', onTapNode);
-    cy.on('tap', onTapBg);
-    cy.on('pan zoom', onViewport);
-    cy.on('position', 'node', (evt) => {
-      const slug = selectedSlugRef.current;
-      if (!slug) return;
-      if (String(evt.target.id()) !== `task:${slug}`) return;
-      const p = evt.target.renderedPosition();
-      setCardPos({ x: p.x, y: p.y });
-    });
-
-    return () => {
-      cy.destroy();
-      cyRef.current = null;
-    };
-  }, [graph, projectTaskCount]);
-
-  // Layout switcher
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    const opts: cytoscape.LayoutOptions = layout === 'cose'
-      ? ({ name: 'cose', animate: true, padding: 60, idealEdgeLength: 110, nodeRepulsion: 8000, nodeOverlap: 24, componentSpacing: 80 } as cytoscape.LayoutOptions)
-      : ({ name: layout, animate: true, padding: 60 } as cytoscape.LayoutOptions);
-    const l = cy.layout(opts);
-    l.one('layoutstop', () => { cy.fit(undefined, 60); cy.panBy({ x: -140, y: 0 }); });
-    l.run();
-  }, [layout]);
-
-  // Visibility toggles
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy) return;
-    cy.batch(() => {
-      (Object.keys(visible) as NodeType[]).forEach(type => {
-        cy.nodes(`[type="${type}"]`).style('display', visible[type] ? 'element' : 'none');
+      nodes.push({
+        id: n.id,
+        label,
+        fill: TYPE_FILL[n.type],
+        size: TYPE_SIZE[n.type],
+        data: { type: n.type, ...(n.meta ?? {}) },
       });
-    });
-  }, [visible]);
+    }
+    let i = 0;
+    for (const e of graph.edges) {
+      if (!visibleIds.has(e.source) || !visibleIds.has(e.target)) { i++; continue; }
+      const eg: RGEdge = {
+        id: `e${i++}`,
+        source: e.source,
+        target: e.target,
+      };
+      if (e.kind === 'waiting') {
+        eg.fill = '#d97706';
+        eg.size = 1.5;
+      } else if (e.kind === 'tag') {
+        eg.fill = '#10b981';
+        eg.size = 1;
+      } else {
+        eg.fill = '#94a3b8';
+        eg.size = 1;
+      }
+      edges.push(eg);
+    }
+    return { rgNodes: nodes, rgEdges: edges };
+  }, [graph, visible, projectTaskCount]);
+
+  const onNodeClick = useCallback((node: { id: string; data?: unknown }, _props?: unknown, event?: { nativeEvent?: MouseEvent; clientX?: number; clientY?: number }) => {
+    const type = (node.data as { type?: NodeType } | undefined)?.type;
+    if (type !== 'task') return;
+    const slug = String(node.id).replace(/^task:/, '');
+    setSelectedSlug(slug);
+
+    const container = containerRef.current;
+    const native = event?.nativeEvent;
+    if (native && container) {
+      const rect = container.getBoundingClientRect();
+      setCardPos({ x: native.clientX - rect.left, y: native.clientY - rect.top });
+    } else if (event?.clientX != null && container) {
+      const rect = container.getBoundingClientRect();
+      setCardPos({ x: event.clientX - rect.left, y: (event.clientY ?? 0) - rect.top });
+    } else {
+      // Fallback: center of left half (leaves room for LAYERS panel)
+      const w = container?.clientWidth ?? 1200;
+      const h = container?.clientHeight ?? 700;
+      setCardPos({ x: Math.min(w / 2, w - 320), y: h / 2 });
+    }
+  }, []);
+
+  const onCanvasClick = useCallback(() => {
+    setSelectedSlug(null);
+    setCardPos(null);
+  }, []);
 
   const toggleLayer = (type: NodeType) => setVisible(v => ({ ...v, [type]: !v[type] }));
 
@@ -355,15 +186,44 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
 
   return (
     <div
-      className="relative h-[calc(100dvh-57px)] overflow-hidden"
+      className="relative h-[calc(100dvh-57px)] overflow-hidden bg-white"
       style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, rgb(148 163 184 / 0.18) 1px, transparent 0)', backgroundSize: '28px 28px' }}
     >
-      <div ref={containerRef} className="absolute inset-0" style={{ position: 'absolute', inset: 0 }} />
+      <div ref={containerRef} className="absolute inset-0">
+        <GraphCanvas
+          ref={canvasRef}
+          nodes={rgNodes}
+          edges={rgEdges}
+          layoutType={layout}
+          draggable
+          theme={{
+            ...lightTheme,
+            canvas: { background: '#ffffff' },
+            node: {
+              ...lightTheme.node,
+              label: {
+                ...lightTheme.node.label,
+                color: '#475569',
+                stroke: '#ffffff',
+                activeColor: '#0f172a',
+              },
+            },
+            edge: {
+              ...lightTheme.edge,
+              fill: '#94a3b8',
+              activeFill: '#10b981',
+            },
+          }}
+          onNodeClick={onNodeClick}
+          onCanvasClick={onCanvasClick}
+          cameraMode="pan"
+        />
+      </div>
 
       {/* Top-left counts */}
       <div className="absolute top-6 left-6 font-mono text-xs text-slate-500 pointer-events-none">
         <div className="text-slate-700 font-medium tracking-tight text-base">Graph</div>
-        <div className="mt-1">{graph.nodes.length} nodes · {graph.edges.length} edges · {layout}</div>
+        <div className="mt-1">{graph.nodes.length} nodes · {graph.edges.length} edges · reagraph</div>
       </div>
 
       {/* Right-side LAYERS + LAYOUT panel */}
@@ -391,7 +251,11 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
         <div className="mt-5 pt-4 border-t border-slate-200/60">
           <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500 mb-2">Layout</div>
           <div className="flex items-center gap-1 p-0.5 rounded-full bg-slate-100/70 text-[12px]">
-            {(['cose', 'grid', 'circle'] as LayoutName[]).map(name => (
+            {([
+              ['forceDirected2d', 'force'],
+              ['radialOut2d', 'radial'],
+              ['circular2d', 'circle'],
+            ] as [LayoutName, string][]).map(([name, label]) => (
               <button
                 key={name}
                 onClick={() => setLayout(name)}
@@ -399,7 +263,7 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
                   layout === name ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {name}
+                {label}
               </button>
             ))}
           </div>
@@ -411,7 +275,7 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
         <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />task</span>
         <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400" />project</span>
         <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" />person</span>
-        <span className="inline-flex items-center gap-2"><span className="w-2.5 h-2.5 rotate-45 border border-emerald-500 bg-white" />tag</span>
+        <span className="inline-flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400" />tag</span>
       </div>
 
       {/* Detail card */}
@@ -460,5 +324,5 @@ function LayerSwatch({ type }: { type: NodeType }) {
   if (type === 'task') return <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />;
   if (type === 'project') return <span className="w-2.5 h-2.5 rounded-sm bg-slate-400" />;
   if (type === 'person') return <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />;
-  return <span className="w-2.5 h-2.5 rotate-45 border border-emerald-500 bg-white" />;
+  return <span className="w-2 h-2 rounded-full bg-emerald-400" />;
 }
