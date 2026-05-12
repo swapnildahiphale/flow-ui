@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0-beta.7",
-    "@tanstack/router-cli": "^1.166.46",
+    "@tanstack/router-cli": "^1.166.43",
     "@tanstack/router-plugin": "^1.78.0",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/react": "^16.0.1",
