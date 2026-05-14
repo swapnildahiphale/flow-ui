@@ -8,7 +8,7 @@ export const Route = createFileRoute('/')({
     const stats = useQuery({ queryKey: ['stats'], queryFn: api.stats });
     const inflight = useQuery({
       queryKey: ['tasks', 'inflight'],
-      queryFn: () => api.tasks({ status: 'in-progress' }),
+      queryFn: () => api.tasks({ status: 'in-progress', kind: 'regular' }),
     });
     const tags = useQuery({ queryKey: ['tags'], queryFn: api.tags });
     const timeline = useQuery({
