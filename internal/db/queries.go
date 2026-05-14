@@ -235,8 +235,10 @@ func GetStats(ctx context.Context, conn *sql.DB) (*Stats, error) {
 		TasksByPriority: map[string]int{},
 	}
 
+	// Overview/stats tiles describe user-driven work only — playbook_run
+	// rows are operational and surfaced separately under /playbooks.
 	rows, err := conn.QueryContext(ctx,
-		`SELECT status, COUNT(*) FROM tasks WHERE archived_at IS NULL GROUP BY status`)
+		`SELECT status, COUNT(*) FROM tasks WHERE archived_at IS NULL AND kind = 'regular' GROUP BY status`)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +254,7 @@ func GetStats(ctx context.Context, conn *sql.DB) (*Stats, error) {
 	rows.Close()
 
 	rows, err = conn.QueryContext(ctx,
-		`SELECT priority, COUNT(*) FROM tasks WHERE archived_at IS NULL AND status != 'done' GROUP BY priority`)
+		`SELECT priority, COUNT(*) FROM tasks WHERE archived_at IS NULL AND kind = 'regular' AND status != 'done' GROUP BY priority`)
 	if err != nil {
 		return nil, err
 	}
@@ -268,14 +270,14 @@ func GetStats(ctx context.Context, conn *sql.DB) (*Stats, error) {
 	rows.Close()
 
 	if err := conn.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM tasks WHERE archived_at IS NULL AND waiting_on IS NOT NULL AND status != 'done'`,
+		`SELECT COUNT(*) FROM tasks WHERE archived_at IS NULL AND kind = 'regular' AND waiting_on IS NOT NULL AND status != 'done'`,
 	).Scan(&s.WaitingCount); err != nil {
 		return nil, err
 	}
 
 	if err := conn.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM tasks
-		 WHERE archived_at IS NULL AND status != 'done' AND due_date IS NOT NULL
+		 WHERE archived_at IS NULL AND kind = 'regular' AND status != 'done' AND due_date IS NOT NULL
 		   AND date(due_date) < date('now')`,
 	).Scan(&s.OverdueCount); err != nil {
 		return nil, err

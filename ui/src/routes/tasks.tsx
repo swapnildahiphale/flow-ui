@@ -18,7 +18,11 @@ export const Route = createFileRoute('/tasks')({
     const search = Route.useSearch();
     // 'waiting' is a synthetic status: in-progress tasks with waiting_on set.
     // Fetch in-progress from the API, then narrow client-side.
-    const apiParams = search.status === 'waiting' ? { ...search, status: 'in-progress' } : search;
+    // Playbook runs are never shown here — they live under /playbooks/<slug>.
+    const apiParams = {
+      ...(search.status === 'waiting' ? { ...search, status: 'in-progress' as const } : search),
+      kind: 'regular',
+    };
     const tasks    = useQuery({ queryKey: ['tasks', apiParams], queryFn: () => api.tasks(apiParams) });
     const projects = useQuery({ queryKey: ['projects'],         queryFn: api.projects });
     const tags     = useQuery({ queryKey: ['tags'],             queryFn: api.tags });
