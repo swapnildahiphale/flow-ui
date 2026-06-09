@@ -191,7 +191,7 @@ function computeFocusSet(graph: G, focusedProjectId: string | null): Set<string>
 function GraphInner({ graph }: { graph: G }) {
   const { nodes: initNodes, edges: initEdges } = useMemo(() => buildElements(graph), [graph]);
 
-  const [layout, setLayout] = useState<LayoutName>('grid');
+  const [layout, setLayout] = useState<LayoutName>('cose');
   const [visible, setVisible] = useState<Record<NodeType, boolean>>({
     task: true,
     project: true,
@@ -203,10 +203,21 @@ function GraphInner({ graph }: { graph: G }) {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const { flowToScreenPosition, getNode } = useReactFlow();
+  const { flowToScreenPosition, getNode, fitView } = useReactFlow();
   const [cardPos, setCardPos] = useState<{ x: number; y: number } | null>(null);
 
-  // Initial layout + relayout on layout change.
+  // Zoom the graph to fill the available canvas. Deferred to the next frame so
+  // the new node positions have been committed and the container has measured
+  // its real dimensions before React Flow computes the transform.
+  const refit = useCallback(() => {
+    requestAnimationFrame(() => {
+      fitView({ padding: 0.12, maxZoom: 1.4, minZoom: 0.4, duration: 200 });
+    });
+  }, [fitView]);
+
+  // Initial layout + relayout on layout change. Re-fit after each layout so the
+  // graph zooms to fill the viewport on cold load and when switching layouts —
+  // the declarative `fitView` prop only fires once and before nodes exist.
   useEffect(() => {
     let laid: Node[];
     if (layout === 'cose') laid = layoutForce(initNodes, initEdges);
@@ -214,7 +225,15 @@ function GraphInner({ graph }: { graph: G }) {
     else laid = layoutCircle(initNodes);
     setNodes(laid);
     setEdges(initEdges);
-  }, [layout, initNodes, initEdges, setNodes, setEdges]);
+    refit();
+  }, [layout, initNodes, initEdges, setNodes, setEdges, refit]);
+
+  // Re-fit when the container/window resizes so the graph keeps filling the
+  // canvas (e.g. cold load before the layout pane has measured its size).
+  useEffect(() => {
+    window.addEventListener('resize', refit);
+    return () => window.removeEventListener('resize', refit);
+  }, [refit]);
 
   const tasksQ = useQuery({ queryKey: ['tasks-all'], queryFn: () => api.tasks({}) });
   const tasksBySlug = useMemo(() => {
@@ -357,8 +376,9 @@ function GraphInner({ graph }: { graph: G }) {
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onMove={onMove}
+        onInit={refit}
         fitView
-        fitViewOptions={{ padding: 0.05, maxZoom: 1.4, minZoom: 0.6 }}
+        fitViewOptions={{ padding: 0.12, maxZoom: 1.4, minZoom: 0.4 }}
         panOnDrag
         zoomOnScroll
         nodesDraggable
