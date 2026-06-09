@@ -1,18 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ReactFlow,
-  ReactFlowProvider,
-  Background,
-  Position,
-  useNodesState,
-  useEdgesState,
-  useReactFlow,
-  type Node,
-  type Edge,
-  type Viewport,
-} from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
-import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY } from 'd3-force';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowRight, GraphIcon } from '@phosphor-icons/react';
@@ -20,7 +7,6 @@ import type { Graph as G, Task } from '@/lib/types';
 import { api } from '@/lib/api';
 import { relative } from '@/lib/time';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { nodeTypes } from '@/components/graph/nodes';
 
 type NodeType = 'task' | 'project' | 'person' | 'tag';
 type LayoutName = 'cose' | 'grid' | 'circle';
@@ -44,153 +30,26 @@ const STATUS_PILL: Record<Task['status'], string> = {
   done: 'bg-slate-100 text-slate-500 border-slate-200',
 };
 
-const NODE_DIM: Record<NodeType, { w: number; h: number }> = {
-  task: { w: 60, h: 44 },
-  project: { w: 120, h: 64 },
-  person: { w: 60, h: 44 },
-  tag: { w: 60, h: 44 },
-};
-
 const CARD_WIDTH = 288;
 const CARD_HEIGHT_ESTIMATE = 200;
 
-// d3-force-based "cose-like" organic layout. Produces clustered, force-directed
-// positions instead of dagre's flat horizontal rank.
-interface SimNode { id: string; x: number; y: number; vx?: number; vy?: number; type?: string }
-interface SimLink { source: string | SimNode; target: string | SimNode }
-
-function layoutForce(nodes: Node[], edges: Edge[]): Node[] {
-  const w = 600;
-  const h = 400;
-  const simNodes: SimNode[] = nodes.map((n, i) => ({
-    id: n.id,
-    type: n.type,
-    x: w / 2 + Math.cos((i / nodes.length) * Math.PI * 2) * 80 + (Math.random() - 0.5) * 20,
-    y: h / 2 + Math.sin((i / nodes.length) * Math.PI * 2) * 80 + (Math.random() - 0.5) * 20,
-  }));
-  const simEdges: SimLink[] = edges.map((e) => ({ source: e.source, target: e.target }));
-  const sim = forceSimulation<SimNode>(simNodes)
-    .force('link', forceLink<SimNode, SimLink>(simEdges).id((d) => d.id).distance(70).strength(0.7))
-    .force('charge', forceManyBody<SimNode>().strength(-160))
-    .force('center', forceCenter(w / 2, h / 2))
-    .force('x', forceX<SimNode>(w / 2).strength(0.09))
-    .force('y', forceY<SimNode>(h / 2).strength(0.11))
-    .force('collide', forceCollide<SimNode>().radius((d) => (d.type === 'project' ? 58 : 24)).strength(0.95))
-    .stop();
-  for (let i = 0; i < 400; i++) sim.tick();
-  const byId = new Map(simNodes.map((s) => [s.id, s]));
-  return nodes.map((n) => {
-    const s = byId.get(n.id);
-    if (!s) return n;
-    return {
-      ...n,
-      position: { x: s.x, y: s.y },
-      targetPosition: Position.Top,
-      sourcePosition: Position.Bottom,
-    };
-  });
-}
-
-function layoutGrid(nodes: Node[]): Node[] {
-  const colsByType: Record<NodeType, number> = { project: 0, task: 1, person: 2, tag: 3 };
-  const buckets: Record<NodeType, Node[]> = { task: [], project: [], person: [], tag: [] };
-  nodes.forEach((n) => buckets[(n.type as NodeType) ?? 'task'].push(n));
-  const colW = 220;
-  const rowH = 90;
-  const placed: Node[] = [];
-  (Object.keys(buckets) as NodeType[]).forEach((t) => {
-    const col = colsByType[t];
-    buckets[t].forEach((n, i) => {
-      placed.push({
-        ...n,
-        position: { x: col * colW, y: i * rowH },
-        targetPosition: Position.Top,
-        sourcePosition: Position.Bottom,
-      });
+function useElementSize() {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setSize({ w: Math.round(width), h: Math.round(height) });
     });
-  });
-  return placed;
-}
-
-function layoutCircle(nodes: Node[]): Node[] {
-  const r = Math.max(220, nodes.length * 22);
-  const cx = r;
-  const cy = r;
-  return nodes.map((n, i) => {
-    const a = (i / nodes.length) * Math.PI * 2;
-    return {
-      ...n,
-      position: { x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r },
-      targetPosition: Position.Top,
-      sourcePosition: Position.Bottom,
-    };
-  });
-}
-
-function buildElements(graph: G): { nodes: Node[]; edges: Edge[]; projectCounts: Record<string, number> } {
-  const projectCounts: Record<string, number> = {};
-  graph.edges.forEach((e) => {
-    if (e.kind === 'membership') projectCounts[e.target] = (projectCounts[e.target] ?? 0) + 1;
-  });
-  const nodes: Node[] = graph.nodes.map((n) => {
-    const base = {
-      id: n.id,
-      type: n.type,
-      position: { x: 0, y: 0 },
-      data: {} as Record<string, unknown>,
-      targetPosition: Position.Top,
-      sourcePosition: Position.Bottom,
-      draggable: true,
-    } as Node;
-    if (n.type === 'project') {
-      base.data = { label: n.label, count: projectCounts[n.id] ?? 0 };
-    } else if (n.type === 'task') {
-      const stale = !!(n.meta && (n.meta as { stale?: boolean }).stale);
-      base.data = { label: n.label, stale };
-    } else {
-      base.data = { label: n.label };
-    }
-    return base;
-  });
-  const edges: Edge[] = graph.edges.map((e, i) => {
-    const baseStyle: React.CSSProperties =
-      e.kind === 'waiting'
-        ? { stroke: '#d97706', strokeDasharray: '6 4', strokeWidth: 1.5, opacity: 0.85 }
-        : e.kind === 'tag'
-        ? { stroke: '#10b981', strokeOpacity: 0.55, strokeWidth: 1.2 }
-        : { stroke: '#94a3b8', strokeOpacity: 0.5, strokeWidth: 1.2 };
-    return {
-      id: `e${i}`,
-      source: e.source,
-      target: e.target,
-      type: 'default',
-      data: { kind: e.kind },
-      style: baseStyle,
-    };
-  });
-  return { nodes, edges, projectCounts };
-}
-
-function computeFocusSet(graph: G, focusedProjectId: string | null): Set<string> | null {
-  if (!focusedProjectId) return null;
-  const set = new Set<string>([focusedProjectId]);
-  // 1-hop: project + membership-connected tasks
-  graph.edges.forEach((e) => {
-    if (e.kind === 'membership' && (e.source === focusedProjectId || e.target === focusedProjectId)) {
-      set.add(e.source === focusedProjectId ? e.target : e.source);
-    }
-  });
-  // 1-hop from those tasks: any neighbor (waiting persons, tags, assignees)
-  graph.edges.forEach((e) => {
-    if (set.has(e.source)) set.add(e.target);
-    if (set.has(e.target)) set.add(e.source);
-  });
-  return set;
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return { ref, size };
 }
 
 function GraphInner({ graph }: { graph: G }) {
-  const { nodes: initNodes, edges: initEdges } = useMemo(() => buildElements(graph), [graph]);
-
   const [layout, setLayout] = useState<LayoutName>('cose');
   const [visible, setVisible] = useState<Record<NodeType, boolean>>({
     task: true,
@@ -201,39 +60,18 @@ function GraphInner({ graph }: { graph: G }) {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
   const [focusedProjectId, setFocusedProjectId] = useState<string | null>(null);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const { flowToScreenPosition, getNode, fitView } = useReactFlow();
-  const [cardPos, setCardPos] = useState<{ x: number; y: number } | null>(null);
+  const { ref: wrapRef, size } = useElementSize();
+  const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
 
-  // Zoom the graph to fill the available canvas. Deferred to the next frame so
-  // the new node positions have been committed and the container has measured
-  // its real dimensions before React Flow computes the transform.
-  const refit = useCallback(() => {
-    requestAnimationFrame(() => {
-      fitView({ padding: 0.12, maxZoom: 1.4, minZoom: 0.4, duration: 200 });
-    });
-  }, [fitView]);
-
-  // Initial layout + relayout on layout change. Re-fit after each layout so the
-  // graph zooms to fill the viewport on cold load and when switching layouts —
-  // the declarative `fitView` prop only fires once and before nodes exist.
-  useEffect(() => {
-    let laid: Node[];
-    if (layout === 'cose') laid = layoutForce(initNodes, initEdges);
-    else if (layout === 'grid') laid = layoutGrid(initNodes);
-    else laid = layoutCircle(initNodes);
-    setNodes(laid);
-    setEdges(initEdges);
-    refit();
-  }, [layout, initNodes, initEdges, setNodes, setEdges, refit]);
-
-  // Re-fit when the container/window resizes so the graph keeps filling the
-  // canvas (e.g. cold load before the layout pane has measured its size).
-  useEffect(() => {
-    window.addEventListener('resize', refit);
-    return () => window.removeEventListener('resize', refit);
-  }, [refit]);
+  // Map our Graph → force-graph data once. `links` reuse source/target ids;
+  // force-graph will replace string ids with node object refs after first tick.
+  const data = useMemo(
+    () => ({
+      nodes: graph.nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, meta: n.meta })),
+      links: graph.edges.map((e) => ({ source: e.source, target: e.target, kind: e.kind })),
+    }),
+    [graph]
+  );
 
   const tasksQ = useQuery({ queryKey: ['tasks-all'], queryFn: () => api.tasks({}) });
   const tasksBySlug = useMemo(() => {
@@ -250,109 +88,28 @@ function GraphInner({ graph }: { graph: G }) {
     return c;
   }, [graph]);
 
-  // Compute focus set (set of node ids that stay full opacity).
-  const focusSet = useMemo(
-    () => computeFocusSet(graph, focusedProjectId),
-    [graph, focusedProjectId]
-  );
-
-  // Apply visibility filtering + fade flag based on focus mode.
-  const visibleNodes = useMemo(
-    () =>
-      nodes
-        .filter((n) => visible[(n.type as NodeType) ?? 'task'])
-        .map((n) => {
-          const faded = focusSet ? !focusSet.has(n.id) : false;
-          const prev = (n.data ?? {}) as Record<string, unknown>;
-          if ((prev.faded as boolean | undefined) === faded) return n;
-          return { ...n, data: { ...prev, faded } };
-        }),
-    [nodes, visible, focusSet]
-  );
-  const visibleIds = useMemo(() => new Set(visibleNodes.map((n) => n.id)), [visibleNodes]);
-  const visibleEdges = useMemo(
-    () =>
-      edges
-        .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
-        .map((e) => {
-          if (!focusSet) return e;
-          const bothIn = focusSet.has(e.source) && focusSet.has(e.target);
-          const baseStyle = e.style ?? {};
-          return {
-            ...e,
-            style: { ...baseStyle, opacity: bothIn ? (baseStyle.opacity ?? 1) : 0.08 },
-          };
-        }),
-    [edges, visibleIds, focusSet]
-  );
-
-  // Re-position the detail card based on selected task's screen position.
-  const updateCardPos = useCallback(() => {
-    if (!selectedSlug) {
-      setCardPos(null);
-      return;
-    }
-    const id = `task:${selectedSlug}`;
-    const n = getNode(id);
-    if (!n) {
-      setCardPos(null);
-      return;
-    }
-    // Node center in flow coordinates.
-    const dim = NODE_DIM.task;
-    const center = { x: n.position.x + dim.w / 2, y: n.position.y + 12 };
-    const screen = flowToScreenPosition(center);
-    setCardPos(screen);
-  }, [selectedSlug, getNode, flowToScreenPosition]);
-
-  useEffect(() => {
-    updateCardPos();
-  }, [updateCardPos, nodes]);
-
-  const onMove = useCallback(
-    (_e: unknown, _v: Viewport) => {
-      updateCardPos();
-    },
-    [updateCardPos]
-  );
-
-  const onNodeClick = useCallback(
-    (_e: React.MouseEvent, n: Node) => {
-      if (n.type === 'project') {
-        setFocusedProjectId((prev) => (prev === n.id ? null : n.id));
-        setSelectedSlug(null);
-        setCardPos(null);
-        return;
-      }
-      if (n.type !== 'task') return;
-      const slug = n.id.replace(/^task:/, '');
-      setSelectedSlug(slug);
-    },
-    []
-  );
-
-  const onPaneClick = useCallback(() => {
-    setSelectedSlug(null);
-    setCardPos(null);
-    setFocusedProjectId(null);
-  }, []);
-
   const toggleLayer = (type: NodeType) => setVisible((v) => ({ ...v, [type]: !v[type] }));
+
+  // referenced fully in later tasks; touch here to keep the build green.
+  void setSelectedSlug;
+  void focusedProjectId;
+  void setFocusedProjectId;
 
   const selectedTask = selectedSlug ? tasksBySlug.get(selectedSlug) : undefined;
 
-  // Adjust card to viewport bounds + container.
+  // placeholder card positioning (rewired in Task 6)
+  const cardPos: { x: number; y: number } | null = null;
   let cardLeft = 0;
   let cardTop = 0;
   let cardReady = false;
   if (cardPos && selectedTask) {
-    // cardPos is in screen coordinates. We want it relative to the page root.
-    cardLeft = cardPos.x - 28;
-    cardTop = cardPos.y - 12;
+    const p = cardPos as { x: number; y: number };
+    cardLeft = p.x - 28;
+    cardTop = p.y - 12;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    if (cardLeft + CARD_WIDTH > w - 24) cardLeft = cardPos.x - CARD_WIDTH + 28;
-    if (cardTop + CARD_HEIGHT_ESTIMATE > h - 24) cardTop = cardPos.y - CARD_HEIGHT_ESTIMATE + 12;
+    if (cardLeft + CARD_WIDTH > w - 24) cardLeft = p.x - CARD_WIDTH + 28;
+    if (cardTop + CARD_HEIGHT_ESTIMATE > h - 24) cardTop = p.y - CARD_HEIGHT_ESTIMATE + 12;
     if (cardLeft < 24) cardLeft = 24;
     if (cardTop < 24) cardTop = 24;
     cardReady = true;
@@ -360,6 +117,7 @@ function GraphInner({ graph }: { graph: G }) {
 
   return (
     <div
+      ref={wrapRef}
       className="relative h-[calc(100dvh-57px)] overflow-hidden"
       style={{
         backgroundImage:
@@ -367,28 +125,18 @@ function GraphInner({ graph }: { graph: G }) {
         backgroundSize: '28px 28px',
       }}
     >
-      <ReactFlow
-        nodes={visibleNodes}
-        edges={visibleEdges}
-        nodeTypes={nodeTypes}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick}
-        onPaneClick={onPaneClick}
-        onMove={onMove}
-        onInit={refit}
-        fitView
-        fitViewOptions={{ padding: 0.12, maxZoom: 1.4, minZoom: 0.4 }}
-        panOnDrag
-        zoomOnScroll
-        nodesDraggable
-        nodesConnectable={false}
-        elementsSelectable
-        proOptions={{ hideAttribution: true }}
-        defaultEdgeOptions={{ type: 'default' }}
-      >
-        <Background gap={28} size={1} color="#94a3b8" />
-      </ReactFlow>
+      {size.w > 0 && size.h > 0 && (
+        <ForceGraph2D
+          ref={fgRef}
+          width={size.w}
+          height={size.h}
+          graphData={data}
+          backgroundColor="rgba(0,0,0,0)"
+          nodeRelSize={5}
+          cooldownTicks={120}
+          onEngineStop={() => fgRef.current?.zoomToFit(400, 40)}
+        />
+      )}
 
       {/* Top-left counts */}
       <div className="absolute top-6 left-6 font-mono text-xs text-slate-500 pointer-events-none">
@@ -530,11 +278,7 @@ export function GraphPage({ graph, loading }: { graph?: G; loading: boolean }) {
       </div>
     );
   }
-  return (
-    <ReactFlowProvider>
-      <GraphInner graph={graph} />
-    </ReactFlowProvider>
-  );
+  return <GraphInner graph={graph} />;
 }
 
 function LayerSwatch({ type }: { type: NodeType }) {
