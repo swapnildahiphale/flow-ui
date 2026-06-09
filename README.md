@@ -63,6 +63,18 @@ flow-ui --version    # print version and exit
 
 The binary reads `~/.flow/flow.db` directly in read-only mode. It never mutates anything; the `flow` CLI remains the only write path.
 
+## Try it with demo data
+
+No `flow` data of your own yet? A small, fully fictional sample dataset lives in
+[`examples/demo-flow/`](examples/). Point flow-ui straight at it:
+
+```bash
+flow-ui --db examples/demo-flow/.flow/flow.db
+```
+
+See [`examples/README.md`](examples/README.md) for the persona behind the data
+and a `seed.sh` that regenerates it from scratch.
+
 ## Stack
 
 - **Backend:** Go (`net/http` + `modernc.org/sqlite`, pure-Go, no CGO)
