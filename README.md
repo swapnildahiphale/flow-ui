@@ -66,7 +66,7 @@ The binary reads `~/.flow/flow.db` directly in read-only mode. It never mutates 
 ## Stack
 
 - **Backend:** Go (`net/http` + `modernc.org/sqlite`, pure-Go, no CGO)
-- **Frontend:** Vite + React + TypeScript + Tailwind + shadcn/ui + TanStack Query + React Flow
+- **Frontend:** Vite + React + TypeScript + Tailwind + shadcn/ui + TanStack Query + react-force-graph-2d (knowledge graph)
 - **Distribution:** `//go:embed`-bundled SPA inside a single Go binary
 
 ## For contributors
