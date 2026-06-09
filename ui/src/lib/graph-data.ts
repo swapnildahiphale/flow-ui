@@ -75,16 +75,15 @@ export function computeFocusSet(graph: Graph, focusedProjectId: string | null): 
   return set;
 }
 
-/** 1-hop neighborhood of a node id (the node + direct neighbors + incident link indices). */
-export function neighborhood(links: FLink[], nodeId: string): { nodes: Set<string>; links: Set<FLink> } {
+/** Ids in the 1-hop neighborhood of a node (the node itself + its direct neighbors). */
+export function neighborhood(links: FLink[], nodeId: string): Set<string> {
   const ns = new Set<string>([nodeId]);
-  const ls = new Set<FLink>();
   links.forEach((l) => {
     const s = typeof l.source === 'object' ? l.source.id : l.source;
     const t = typeof l.target === 'object' ? l.target.id : l.target;
     if (s === nodeId || t === nodeId) {
-      ns.add(s); ns.add(t); ls.add(l);
+      ns.add(s); ns.add(t);
     }
   });
-  return { nodes: ns, links: ls };
+  return ns;
 }

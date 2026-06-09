@@ -7,7 +7,7 @@ import type { Graph as G, Task } from '@/lib/types';
 import { api } from '@/lib/api';
 import { relative } from '@/lib/time';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { buildForceData, computeFocusSet, neighborhood, EDGE_STYLE, type FNode, type FLink } from '@/lib/graph-data';
+import { buildForceData, computeFocusSet, neighborhood, EDGE_STYLE, type FNode, type FLink, type NodeType } from '@/lib/graph-data';
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 function rgba(hex: string, a: number) {
@@ -29,7 +29,6 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
 
 const LABEL_ZOOM = 1.6; // global scale at which task/person/tag labels start fading in
 
-type NodeType = 'task' | 'project' | 'person' | 'tag';
 type LayoutName = 'cose' | 'grid' | 'circle';
 
 const LAYER_LABELS: Record<NodeType, string> = {
@@ -169,8 +168,7 @@ function GraphInner({ graph }: { graph: G }) {
     (node: NodeObject | null) => {
       if (!node) { hoverIdsRef.current = null; setHoverId(null); return; }
       const id = (node as unknown as FNode).id;
-      const { nodes } = neighborhood(allLinks, id);
-      hoverIdsRef.current = nodes;
+      hoverIdsRef.current = neighborhood(allLinks, id);
       setHoverId(id);
     },
     [allLinks]
