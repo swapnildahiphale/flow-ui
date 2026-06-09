@@ -326,11 +326,12 @@ function GraphInner({ graph }: { graph: G }) {
           nodeRelSize={5}
           nodeVal={(n) => { const r = (n as unknown as FNode).radius; return (r * r) / 25; }}
           nodeCanvasObject={drawNode}
+          autoPauseRedraw={false}
           nodePointerAreaPaint={(node, color, ctx) => {
             const n = node as unknown as FNode;
             ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(n.x ?? 0, n.y ?? 0, n.radius + 2, 0, Math.PI * 2);
+            ctx.arc(n.x ?? 0, n.y ?? 0, Math.max(n.radius + 3, 7), 0, Math.PI * 2);
             ctx.fill();
           }}
           linkColor={(l) => {
