@@ -346,7 +346,9 @@ function GraphInner({ graph }: { graph: G }) {
           onBackgroundClick={onBgClick}
           onZoom={refreshCardPos}
           linkDirectionalParticles={0}
+          warmupTicks={20}
           cooldownTicks={120}
+          onEngineTick={() => fgRef.current?.zoomToFit(0, 40)}
           onEngineStop={() => { fgRef.current?.zoomToFit(400, 40); refreshCardPos(); }}
         />
       )}
