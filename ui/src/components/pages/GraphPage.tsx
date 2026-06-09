@@ -86,6 +86,10 @@ function GraphInner({ graph }: { graph: G }) {
   const hoverIdsRef = useRef<Set<string> | null>(null);
   const focusSetRef = useRef<Set<string> | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // The canvas stays hidden until the layout is settled and fitted, so the user
+  // never sees the unfitted first frame snap to center. Revealed (faded in) once.
+  const [ready, setReady] = useState(false);
+  const revealedRef = useRef(false);
 
   const { nodes: allNodes, links: allLinks } = useMemo(() => buildForceData(graph), [graph]);
   const data = useMemo(() => {
@@ -317,6 +321,14 @@ function GraphInner({ graph }: { graph: G }) {
       }}
     >
       {size.w > 0 && size.h > 0 && (
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            opacity: ready ? 1 : 0,
+            transition: 'opacity 180ms ease',
+          }}
+        >
         <ForceGraph2D
           ref={fgRef}
           width={size.w}
@@ -346,11 +358,23 @@ function GraphInner({ graph }: { graph: G }) {
           onBackgroundClick={onBgClick}
           onZoom={refreshCardPos}
           linkDirectionalParticles={0}
-          warmupTicks={20}
-          cooldownTicks={120}
+          warmupTicks={80}
+          cooldownTicks={80}
+          // Keep the view fitted while the engine runs (hidden on first load).
           onEngineTick={() => fgRef.current?.zoomToFit(0, 40)}
-          onEngineStop={() => { fgRef.current?.zoomToFit(400, 40); refreshCardPos(); }}
+          onEngineStop={() => {
+            // The layout is final here. Fit instantly, let that frame paint, then
+            // fade the canvas in — so the user never sees an unfitted/off-center
+            // frame snap to center.
+            fgRef.current?.zoomToFit(0, 40);
+            refreshCardPos();
+            if (!revealedRef.current) {
+              revealedRef.current = true;
+              requestAnimationFrame(() => setReady(true));
+            }
+          }}
         />
+        </div>
       )}
 
       {/* Top-left counts */}
