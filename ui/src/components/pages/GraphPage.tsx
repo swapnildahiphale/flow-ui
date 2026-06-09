@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import ForceGraph2D, { type ForceGraphMethods } from 'react-force-graph-2d';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ForceGraph2D, { type ForceGraphMethods, type NodeObject } from 'react-force-graph-2d';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { ArrowRight, GraphIcon } from '@phosphor-icons/react';
@@ -7,6 +7,20 @@ import type { Graph as G, Task } from '@/lib/types';
 import { api } from '@/lib/api';
 import { relative } from '@/lib/time';
 import { EmptyState } from '@/components/primitives/EmptyState';
+import { buildForceData, type FNode } from '@/lib/graph-data';
+
+function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+const LABEL_ZOOM = 1.1; // global scale at which labels start fading in
 
 type NodeType = 'task' | 'project' | 'person' | 'tag';
 type LayoutName = 'cose' | 'grid' | 'circle';
@@ -62,15 +76,63 @@ function GraphInner({ graph }: { graph: G }) {
 
   const { ref: wrapRef, size } = useElementSize();
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
+  const hoverIdsRef = useRef<Set<string> | null>(null);
 
-  // Map our Graph → force-graph data once. `links` reuse source/target ids;
-  // force-graph will replace string ids with node object refs after first tick.
-  const data = useMemo(
-    () => ({
-      nodes: graph.nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, meta: n.meta })),
-      links: graph.edges.map((e) => ({ source: e.source, target: e.target, kind: e.kind })),
-    }),
-    [graph]
+  const { nodes: allNodes, links: allLinks } = useMemo(() => buildForceData(graph), [graph]);
+  const data = useMemo(() => ({ nodes: allNodes, links: allLinks }), [allNodes, allLinks]);
+
+  const drawNode = useCallback(
+    (node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const n = node as unknown as FNode;
+      const r = n.radius;
+      const x = n.x ?? 0;
+      const y = n.y ?? 0;
+
+      // shape per type
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = n.stroke;
+      if (n.type === 'project') {
+        const s = r * 1.6;
+        roundRect(ctx, x - s, y - s * 0.7, s * 2, s * 1.4, 4);
+        ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke();
+      } else if (n.type === 'tag') {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(-r, -r, r * 2, r * 2);
+        ctx.strokeRect(-r, -r, r * 2, r * 2);
+        ctx.restore();
+      } else {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = n.type === 'person' ? '#fffbeb' : '#ffffff';
+        ctx.fill(); ctx.stroke();
+      }
+
+      // label: always for projects; for others fade in with zoom, or when highlighted
+      const highlighted = hoverIdsRef.current?.has(n.id) ?? false;
+      let alpha = 0;
+      if (n.type === 'project' || highlighted) alpha = 1;
+      else alpha = clamp((globalScale - LABEL_ZOOM) / 0.6, 0, 1);
+      if (alpha > 0.02) {
+        const fontSize = (n.type === 'project' ? 12 : 11) / globalScale;
+        ctx.font = `${fontSize}px ui-sans-serif, system-ui`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const text = n.type === 'tag' ? `#${n.label}` : n.label;
+        const labelColor =
+          n.type === 'person' ? '#92400e' : n.type === 'tag' ? '#065f46' : '#0f172a';
+        // soft white plate behind text for legibility
+        const tw = ctx.measureText(text).width;
+        ctx.globalAlpha = alpha * 0.85;
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillRect(x - tw / 2 - 2 / globalScale, y + r + 1 / globalScale, tw + 4 / globalScale, fontSize + 2 / globalScale);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = labelColor;
+        ctx.fillText(text, x, y + r + 2 / globalScale);
+        ctx.globalAlpha = 1;
+      }
+    },
+    []
   );
 
   const tasksQ = useQuery({ queryKey: ['tasks-all'], queryFn: () => api.tasks({}) });
@@ -133,6 +195,15 @@ function GraphInner({ graph }: { graph: G }) {
           graphData={data}
           backgroundColor="rgba(0,0,0,0)"
           nodeRelSize={5}
+          nodeVal={(n) => { const r = (n as unknown as FNode).radius; return (r * r) / 25; }}
+          nodeCanvasObject={drawNode}
+          nodePointerAreaPaint={(node, color, ctx) => {
+            const n = node as unknown as FNode;
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(n.x ?? 0, n.y ?? 0, n.radius + 2, 0, Math.PI * 2);
+            ctx.fill();
+          }}
           cooldownTicks={120}
           onEngineStop={() => fgRef.current?.zoomToFit(400, 40)}
         />
