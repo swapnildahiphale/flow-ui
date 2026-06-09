@@ -88,7 +88,16 @@ function GraphInner({ graph }: { graph: G }) {
   const [hoverId, setHoverId] = useState<string | null>(null);
 
   const { nodes: allNodes, links: allLinks } = useMemo(() => buildForceData(graph), [graph]);
-  const data = useMemo(() => ({ nodes: allNodes, links: allLinks }), [allNodes, allLinks]);
+  const data = useMemo(() => {
+    const nodes = allNodes.filter((n) => visible[n.type]);
+    const ids = new Set(nodes.map((n) => n.id));
+    const links = allLinks.filter((l) => {
+      const s = typeof l.source === 'object' ? (l.source as FNode).id : l.source;
+      const t = typeof l.target === 'object' ? (l.target as FNode).id : l.target;
+      return ids.has(s) && ids.has(t);
+    });
+    return { nodes, links };
+  }, [allNodes, allLinks, visible]);
 
   const drawNode = useCallback(
     (node: NodeObject, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -169,6 +178,38 @@ function GraphInner({ graph }: { graph: G }) {
     if (focusSetRef.current) return focusSetRef.current.has(s) && focusSetRef.current.has(t);
     return true;
   }, [hoverId]);
+
+  // Apply layout on layout/data change: free positions (cose) or pin fx/fy.
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg) return;
+    const ns = data.nodes;
+    if (layout === 'cose') {
+      ns.forEach((n) => { n.fx = undefined; n.fy = undefined; });
+      fg.d3ReheatSimulation();
+    } else if (layout === 'grid') {
+      const cols: Record<NodeType, number> = { project: 0, task: 1, person: 2, tag: 3 };
+      const counters: Record<NodeType, number> = { project: 0, task: 0, person: 0, tag: 0 };
+      ns.forEach((n) => {
+        n.fx = cols[n.type] * 180 - 270;
+        n.fy = counters[n.type]++ * 26 - 200;
+      });
+    } else { // circle
+      const R = Math.max(180, ns.length * 9);
+      ns.forEach((n, i) => {
+        const a = (i / ns.length) * Math.PI * 2;
+        n.fx = Math.cos(a) * R;
+        n.fy = Math.sin(a) * R;
+      });
+    }
+    const id = requestAnimationFrame(() => fg.zoomToFit(400, 40));
+    return () => cancelAnimationFrame(id);
+  }, [layout, data]);
+
+  // Refit on container resize.
+  useEffect(() => {
+    if (size.w > 0 && size.h > 0) fgRef.current?.zoomToFit(200, 40);
+  }, [size.w, size.h]);
 
   const tasksQ = useQuery({ queryKey: ['tasks-all'], queryFn: () => api.tasks({}) });
   const tasksBySlug = useMemo(() => {
