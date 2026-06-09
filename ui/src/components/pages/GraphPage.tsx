@@ -86,10 +86,11 @@ function GraphInner({ graph }: { graph: G }) {
   const hoverIdsRef = useRef<Set<string> | null>(null);
   const focusSetRef = useRef<Set<string> | null>(null);
   const [hoverId, setHoverId] = useState<string | null>(null);
-  // The canvas stays hidden until the layout is settled and fitted, so the user
-  // never sees the unfitted first frame snap to center. Revealed (faded in) once.
+  // The canvas settles its layout while hidden behind a brief loading indicator,
+  // then fades in already-fitted — so the user never sees the graph drift in from
+  // the side or rescale. Revealed exactly once, after the engine has come to rest.
   const [ready, setReady] = useState(false);
-  const revealedRef = useRef(false);
+  const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { nodes: allNodes, links: allLinks } = useMemo(() => buildForceData(graph), [graph]);
   const data = useMemo(() => {
@@ -241,6 +242,15 @@ function GraphInner({ graph }: { graph: G }) {
     if (size.w > 0 && size.h > 0) fgRef.current?.zoomToFit(200, 40);
   }, [size.w, size.h]);
 
+  // Mask only the first chaotic moment of the layout behind the loading
+  // indicator, then reveal so the user watches the graph settle (jiggle) into
+  // place. By ~150ms the centroid is stable and centered, so the visible motion
+  // is a graceful settle — not a slide in from the side.
+  useEffect(() => {
+    revealTimerRef.current = setTimeout(() => setReady(true), 150);
+    return () => { if (revealTimerRef.current) clearTimeout(revealTimerRef.current); };
+  }, []);
+
   // Project-focus set mirrored into the ref the painters read.
   const focusSet = useMemo(() => computeFocusSet(graph, focusedProjectId), [graph, focusedProjectId]);
   useEffect(() => { focusSetRef.current = focusSet; }, [focusSet]);
@@ -358,24 +368,33 @@ function GraphInner({ graph }: { graph: G }) {
           onBackgroundClick={onBgClick}
           onZoom={refreshCardPos}
           linkDirectionalParticles={0}
-          warmupTicks={80}
-          cooldownTicks={80}
-          // Keep the view fitted while the engine runs (hidden on first load).
-          onEngineTick={() => fgRef.current?.zoomToFit(0, 40)}
+          // No warmup: let the layout bloom and jiggle into place visibly — that
+          // settling motion is the reveal. The view is fitted with an *animated*
+          // zoom on every tick, so the camera smoothly tracks the spreading graph
+          // and keeps it centered (no per-tick snap, no left-to-center slide).
+          warmupTicks={0}
+          cooldownTicks={90}
+          onEngineTick={() => fgRef.current?.zoomToFit(400, 40)}
           onEngineStop={() => {
-            // The layout is final here. Fit instantly, let that frame paint, then
-            // fade the canvas in — so the user never sees an unfitted/off-center
-            // frame snap to center.
-            fgRef.current?.zoomToFit(0, 40);
+            fgRef.current?.zoomToFit(400, 40);
             refreshCardPos();
-            if (!revealedRef.current) {
-              revealedRef.current = true;
-              requestAnimationFrame(() => setReady(true));
-            }
           }}
         />
         </div>
       )}
+
+      {/* Brief loading indicator while the layout settles — fades out as the
+          graph fades in, so the canvas area is never just blank. */}
+      <div
+        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        style={{ opacity: ready ? 0 : 1, transition: 'opacity 180ms ease' }}
+        aria-hidden={ready}
+      >
+        <div className="flex items-center gap-2.5 text-slate-400">
+          <GraphIcon size={20} weight="regular" className="animate-pulse" />
+          <span className="text-sm">Laying out graph…</span>
+        </div>
+      </div>
 
       {/* Top-left counts */}
       <div className="absolute top-6 left-6 font-mono text-xs text-slate-500 pointer-events-none">
