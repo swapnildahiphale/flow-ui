@@ -7,9 +7,16 @@ import type { Graph as G, Task } from '@/lib/types';
 import { api } from '@/lib/api';
 import { relative } from '@/lib/time';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { buildForceData, type FNode } from '@/lib/graph-data';
+import { buildForceData, neighborhood, EDGE_STYLE, type FNode, type FLink } from '@/lib/graph-data';
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
+function rgba(hex: string, a: number) {
+  const v = hex.replace('#', '');
+  const r = parseInt(v.slice(0, 2), 16);
+  const g = parseInt(v.slice(2, 4), 16);
+  const b = parseInt(v.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -77,6 +84,8 @@ function GraphInner({ graph }: { graph: G }) {
   const { ref: wrapRef, size } = useElementSize();
   const fgRef = useRef<ForceGraphMethods | undefined>(undefined);
   const hoverIdsRef = useRef<Set<string> | null>(null);
+  const focusSetRef = useRef<Set<string> | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
   const { nodes: allNodes, links: allLinks } = useMemo(() => buildForceData(graph), [graph]);
   const data = useMemo(() => ({ nodes: allNodes, links: allLinks }), [allNodes, allLinks]);
@@ -87,6 +96,12 @@ function GraphInner({ graph }: { graph: G }) {
       const r = n.radius;
       const x = n.x ?? 0;
       const y = n.y ?? 0;
+
+      // dim non-highlighted nodes (hover wins; else project focus; else all full)
+      const hot = hoverId
+        ? (hoverIdsRef.current?.has(n.id) ?? false)
+        : (focusSetRef.current ? focusSetRef.current.has(n.id) : true);
+      ctx.globalAlpha = hot ? 1 : 0.15;
 
       // shape per type
       ctx.lineWidth = 1.6;
@@ -131,9 +146,29 @@ function GraphInner({ graph }: { graph: G }) {
         ctx.fillText(text, x, y + r + 2 / globalScale);
         ctx.globalAlpha = 1;
       }
+      ctx.globalAlpha = 1;
     },
-    []
+    [hoverId]
   );
+
+  const onHover = useCallback(
+    (node: NodeObject | null) => {
+      if (!node) { hoverIdsRef.current = null; setHoverId(null); return; }
+      const id = (node as unknown as FNode).id;
+      const { nodes } = neighborhood(allLinks, id);
+      hoverIdsRef.current = nodes;
+      setHoverId(id);
+    },
+    [allLinks]
+  );
+
+  const isLinkHot = useCallback((l: FLink) => {
+    const s = typeof l.source === 'object' ? (l.source as FNode).id : l.source;
+    const t = typeof l.target === 'object' ? (l.target as FNode).id : l.target;
+    if (hoverId) return s === hoverId || t === hoverId;
+    if (focusSetRef.current) return focusSetRef.current.has(s) && focusSetRef.current.has(t);
+    return true;
+  }, [hoverId]);
 
   const tasksQ = useQuery({ queryKey: ['tasks-all'], queryFn: () => api.tasks({}) });
   const tasksBySlug = useMemo(() => {
@@ -204,6 +239,15 @@ function GraphInner({ graph }: { graph: G }) {
             ctx.arc(n.x ?? 0, n.y ?? 0, n.radius + 2, 0, Math.PI * 2);
             ctx.fill();
           }}
+          linkColor={(l) => {
+            const st = EDGE_STYLE[(l as unknown as FLink).kind];
+            const hot = isLinkHot(l as unknown as FLink);
+            return rgba(st.color, hot ? st.alpha : 0.06);
+          }}
+          linkWidth={(l) => EDGE_STYLE[(l as unknown as FLink).kind].width}
+          linkLineDash={(l) => EDGE_STYLE[(l as unknown as FLink).kind].dash}
+          onNodeHover={onHover}
+          linkDirectionalParticles={0}
           cooldownTicks={120}
           onEngineStop={() => fgRef.current?.zoomToFit(400, 40)}
         />
