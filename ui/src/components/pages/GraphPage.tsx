@@ -7,7 +7,7 @@ import type { Graph as G, Task } from '@/lib/types';
 import { api } from '@/lib/api';
 import { relative } from '@/lib/time';
 import { EmptyState } from '@/components/primitives/EmptyState';
-import { buildForceData, neighborhood, EDGE_STYLE, type FNode, type FLink } from '@/lib/graph-data';
+import { buildForceData, computeFocusSet, neighborhood, EDGE_STYLE, type FNode, type FLink } from '@/lib/graph-data';
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 function rgba(hex: string, a: number) {
@@ -211,6 +211,39 @@ function GraphInner({ graph }: { graph: G }) {
     if (size.w > 0 && size.h > 0) fgRef.current?.zoomToFit(200, 40);
   }, [size.w, size.h]);
 
+  // Project-focus set mirrored into the ref the painters read.
+  const focusSet = useMemo(() => computeFocusSet(graph, focusedProjectId), [graph, focusedProjectId]);
+  useEffect(() => { focusSetRef.current = focusSet; }, [focusSet]);
+
+  const onNodeClick = useCallback((node: NodeObject) => {
+    const n = node as unknown as FNode;
+    if (n.type === 'project') {
+      setFocusedProjectId((prev) => (prev === n.id ? null : n.id));
+      setSelectedSlug(null);
+      return;
+    }
+    if (n.type !== 'task') return;
+    setSelectedSlug(n.id.replace(/^task:/, ''));
+  }, []);
+
+  const onBgClick = useCallback(() => {
+    setSelectedSlug(null);
+    setFocusedProjectId(null);
+  }, []);
+
+  const [cardPos, setCardPos] = useState<{ x: number; y: number } | null>(null);
+
+  const refreshCardPos = useCallback(() => {
+    const fg = fgRef.current;
+    if (!fg || !selectedSlug) { setCardPos(null); return; }
+    const n = data.nodes.find((nn) => nn.id === `task:${selectedSlug}`);
+    if (!n || n.x == null || n.y == null) { setCardPos(null); return; }
+    const p = fg.graph2ScreenCoords(n.x, n.y);
+    setCardPos({ x: p.x, y: p.y });
+  }, [selectedSlug, data.nodes]);
+
+  useEffect(() => { refreshCardPos(); }, [refreshCardPos]);
+
   const tasksQ = useQuery({ queryKey: ['tasks-all'], queryFn: () => api.tasks({}) });
   const tasksBySlug = useMemo(() => {
     const m = new Map<string, Task>();
@@ -228,26 +261,20 @@ function GraphInner({ graph }: { graph: G }) {
 
   const toggleLayer = (type: NodeType) => setVisible((v) => ({ ...v, [type]: !v[type] }));
 
-  // referenced fully in later tasks; touch here to keep the build green.
-  void setSelectedSlug;
-  void focusedProjectId;
-  void setFocusedProjectId;
-
   const selectedTask = selectedSlug ? tasksBySlug.get(selectedSlug) : undefined;
 
-  // placeholder card positioning (rewired in Task 6)
-  const cardPos: { x: number; y: number } | null = null;
+  // Adjust card to viewport bounds. cardPos is screen coords of the node;
+  // anchor the card just below/right of the dot, clamped to the viewport.
   let cardLeft = 0;
   let cardTop = 0;
   let cardReady = false;
   if (cardPos && selectedTask) {
-    const p = cardPos as { x: number; y: number };
-    cardLeft = p.x - 28;
-    cardTop = p.y - 12;
+    cardLeft = cardPos.x + 14;
+    cardTop = cardPos.y - 12;
     const w = window.innerWidth;
     const h = window.innerHeight;
-    if (cardLeft + CARD_WIDTH > w - 24) cardLeft = p.x - CARD_WIDTH + 28;
-    if (cardTop + CARD_HEIGHT_ESTIMATE > h - 24) cardTop = p.y - CARD_HEIGHT_ESTIMATE + 12;
+    if (cardLeft + CARD_WIDTH > w - 24) cardLeft = cardPos.x - CARD_WIDTH - 14;
+    if (cardTop + CARD_HEIGHT_ESTIMATE > h - 24) cardTop = cardPos.y - CARD_HEIGHT_ESTIMATE + 12;
     if (cardLeft < 24) cardLeft = 24;
     if (cardTop < 24) cardTop = 24;
     cardReady = true;
@@ -288,9 +315,12 @@ function GraphInner({ graph }: { graph: G }) {
           linkWidth={(l) => EDGE_STYLE[(l as unknown as FLink).kind].width}
           linkLineDash={(l) => EDGE_STYLE[(l as unknown as FLink).kind].dash}
           onNodeHover={onHover}
+          onNodeClick={onNodeClick}
+          onBackgroundClick={onBgClick}
+          onZoom={refreshCardPos}
           linkDirectionalParticles={0}
           cooldownTicks={120}
-          onEngineStop={() => fgRef.current?.zoomToFit(400, 40)}
+          onEngineStop={() => { fgRef.current?.zoomToFit(400, 40); refreshCardPos(); }}
         />
       )}
 
