@@ -27,7 +27,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-const LABEL_ZOOM = 1.1; // global scale at which labels start fading in
+const LABEL_ZOOM = 1.6; // global scale at which task/person/tag labels start fading in
 
 type NodeType = 'task' | 'project' | 'person' | 'tag';
 type LayoutName = 'cose' | 'grid' | 'circle';
@@ -186,25 +186,51 @@ function GraphInner({ graph }: { graph: G }) {
     const ns = data.nodes;
     if (layout === 'cose') {
       ns.forEach((n) => { n.fx = undefined; n.fy = undefined; });
-      fg.d3ReheatSimulation();
     } else if (layout === 'grid') {
-      const cols: Record<NodeType, number> = { project: 0, task: 1, person: 2, tag: 3 };
+      // Lay each type out in its own column, sized so the tallest column spans a
+      // comfortable band and projects (larger nodes) don't collide.
+      const order: NodeType[] = ['project', 'task', 'person', 'tag'];
+      const counts: Record<NodeType, number> = { project: 0, task: 0, person: 0, tag: 0 };
+      ns.forEach((n) => { counts[n.type]++; });
       const counters: Record<NodeType, number> = { project: 0, task: 0, person: 0, tag: 0 };
+      const colGap = 200;
+      const band = 520; // vertical extent each column is spread across
       ns.forEach((n) => {
-        n.fx = cols[n.type] * 180 - 270;
-        n.fy = counters[n.type]++ * 26 - 200;
+        const colIdx = order.indexOf(n.type);
+        const x = colIdx * colGap - (colGap * (order.length - 1)) / 2;
+        const total = counts[n.type];
+        const i = counters[n.type]++;
+        const y = total > 1 ? (i / (total - 1)) * band - band / 2 : 0;
+        n.fx = x; n.fy = y; n.x = x; n.y = y;
       });
     } else { // circle
       const R = Math.max(180, ns.length * 9);
       ns.forEach((n, i) => {
         const a = (i / ns.length) * Math.PI * 2;
-        n.fx = Math.cos(a) * R;
-        n.fy = Math.sin(a) * R;
+        const x = Math.cos(a) * R;
+        const y = Math.sin(a) * R;
+        n.fx = x; n.fy = y; n.x = x; n.y = y;
       });
     }
+    // Reheat in every case so pinned positions (grid/circle) snap into place and
+    // the freed nodes (cose) re-float — d3 only applies fx/fy while ticking.
+    fg.d3ReheatSimulation();
     const id = requestAnimationFrame(() => fg.zoomToFit(400, 40));
     return () => cancelAnimationFrame(id);
   }, [layout, data]);
+
+  // Tune the force engine once the canvas is measured. force-graph's defaults
+  // (charge -30, link ~30) leave a 55-node graph thin and scattered; pull nodes
+  // into tighter, more legible clusters.
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg || size.w === 0) return;
+    const charge = fg.d3Force('charge');
+    if (charge) charge.strength(-140);
+    const link = fg.d3Force('link');
+    if (link) link.distance(46);
+    fg.d3ReheatSimulation();
+  }, [size.w, data]);
 
   // Refit on container resize.
   useEffect(() => {
