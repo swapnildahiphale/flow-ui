@@ -11,6 +11,15 @@ async function get<T>(url: string): Promise<T> {
   return r.json();
 }
 
+async function post<T>(url: string): Promise<T> {
+  const r = await fetch(BASE + url, { method: 'POST' });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({ error: r.statusText }));
+    throw new Error(body.error || `HTTP ${r.status}`);
+  }
+  return r.json();
+}
+
 export const api = {
   health: () => get<{ status: string }>('/health'),
   stats: () => get<Stats>('/stats'),
@@ -22,6 +31,7 @@ export const api = {
   task: (slug: string) => get<Task>(`/tasks/${encodeURIComponent(slug)}`),
   taskBrief: (slug: string) => get<{ markdown: string }>(`/tasks/${encodeURIComponent(slug)}/brief`),
   taskUpdates: (slug: string) => get<{ updates: Update[]; count: number }>(`/tasks/${encodeURIComponent(slug)}/updates`),
+  archiveTask: (slug: string) => post<{ slug: string; archived: boolean }>(`/tasks/${encodeURIComponent(slug)}/archive`),
 
   projects: () => get<{ projects: Project[]; count: number }>('/projects'),
   project: (slug: string) => get<Project>(`/projects/${encodeURIComponent(slug)}`),

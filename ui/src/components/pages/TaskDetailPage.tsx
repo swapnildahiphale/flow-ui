@@ -1,13 +1,26 @@
 import type { Task, Update } from '@/lib/types';
 import { Chip } from '@/components/primitives/Chip';
 import { MarkdownView } from '@/components/markdown/MarkdownView';
-import { Link } from '@tanstack/react-router';
-import { Copy, CaretRight } from '@phosphor-icons/react';
+import { Link, useNavigate } from '@tanstack/react-router';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Copy, CaretRight, Archive } from '@phosphor-icons/react';
 import { relative } from '@/lib/time';
+import { api } from '@/lib/api';
 import type { Vocab } from '@/lib/cross-ref';
 import { PRIORITY_VARIANT } from '@/lib/priority';
 
 export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; brief?: string; updates: Update[]; vocab: Vocab }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const archive = useMutation({
+    mutationFn: () => api.archiveTask(task.slug),
+    onSuccess: () => {
+      // Drop the task out of the active list and send the user back to it.
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      navigate({ to: '/tasks' });
+    },
+  });
   const isWaiting = task.status === 'in-progress' && !!task.waiting_on;
   const statusLabel = isWaiting ? 'waiting' : task.status;
   const statusVariant: 'accent' | 'amber' | 'neutral' = isWaiting ? 'amber' : task.status === 'done' ? 'neutral' : 'accent';
@@ -37,13 +50,30 @@ export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; br
             )}
           </div>
         </div>
-        <button
-          onClick={() => navigator.clipboard.writeText(`flow do ${task.slug}`)}
-          className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-[13.5px] font-medium bg-white text-slate-900 border border-slate-200/70 hover:bg-slate-50 transition active:translate-y-[1px]"
-        >
-          <Copy size={14} /> <span className="font-mono">flow do {task.slug}</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => navigator.clipboard.writeText(`flow do ${task.slug}`)}
+            className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-[13.5px] font-medium bg-white text-slate-900 border border-slate-200/70 hover:bg-slate-50 transition active:translate-y-[1px]"
+          >
+            <Copy size={14} /> <span className="font-mono">flow do {task.slug}</span>
+          </button>
+          {!task.archived_at && (
+            <button
+              onClick={() => archive.mutate()}
+              disabled={archive.isPending}
+              title="Archive this task"
+              className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-[13.5px] font-medium bg-white text-slate-600 border border-slate-200/70 hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition active:translate-y-[1px] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Archive size={14} /> <span>{archive.isPending ? 'Archiving…' : 'Archive'}</span>
+            </button>
+          )}
+        </div>
       </header>
+      {archive.isError && (
+        <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          Couldn’t archive this task: {(archive.error as Error).message}
+        </div>
+      )}
 
       <div className="grid grid-cols-12 gap-10">
         <div className="col-span-12 lg:col-span-8 space-y-12">
