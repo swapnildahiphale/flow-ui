@@ -1,0 +1,24 @@
+# flow-ui
+
+> flow-ui is a local, read-only web dashboard for the [flow](https://github.com/Facets-cloud/flow) CLI — a personal task and project manager that stores everything in a single SQLite database. flow-ui reads that database and renders your tasks, projects, knowledge base, progress updates, tags, and a knowledge graph of how they all connect. It is a single Go binary with the React UI embedded, runs entirely on localhost, sends nothing to the cloud, and never writes to your data (the flow CLI remains the only write path).
+
+## Key facts
+
+- **What it is:** a read-only visualization dashboard for the flow CLI's `~/.flow/flow.db` SQLite database.
+- **What it shows:** tasks & projects (filter by status/priority/tag/project), a knowledge-base viewer with cross-references, a chronological updates timeline, a force-directed knowledge graph (tasks, projects, people, tags and their relationships), and insights (waiting-on leaderboard, tag co-occurrence, stale-task clustering, activity heatmap).
+- **Read-only by design:** it never mutates anything; all writes happen through the flow CLI.
+- **Distribution:** one Go binary (net/http + modernc.org/sqlite, pure Go, no CGO) with a Vite/React/TypeScript/Tailwind/shadcn SPA embedded via `go:embed`. No Node.js required at runtime.
+- **Platforms:** macOS (Apple Silicon arm64, Intel amd64) and Linux (amd64).
+- **License:** MIT.
+- **Prerequisite:** the flow CLI must be installed and initialized (`flow init`) first.
+
+## Install
+
+In any Claude Code session, paste: `Install flow-ui from https://github.com/swapnildahiphale/flow-ui`
+Or download the binary for your platform from the GitHub releases and run `flow-ui`.
+
+## Links
+
+- [README](https://github.com/swapnildahiphale/flow-ui/blob/main/README.md): full documentation, install, and usage.
+- [Demo dataset](https://github.com/swapnildahiphale/flow-ui/tree/main/examples): a fictional sample `~/.flow` you can point flow-ui at without any data of your own.
+- [flow CLI](https://github.com/Facets-cloud/flow): the parent project flow-ui visualizes.
