@@ -15,9 +15,9 @@ export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; br
   const archive = useMutation({
     mutationFn: () => api.archiveTask(task.slug),
     onSuccess: () => {
-      // Drop the task out of the active list and send the user back to it.
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      // Archiving touches lists, counts, project views and the graph — invalidate
+      // everything rather than enumerate keys that drift over time.
+      queryClient.invalidateQueries();
       navigate({ to: '/tasks' });
     },
   });

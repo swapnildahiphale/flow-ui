@@ -2,23 +2,16 @@ import type { Task, Project, Playbook, Update, KBFile, Stats, TimelineEntry, Gra
 
 const BASE = '/api/v1';
 
-async function get<T>(url: string): Promise<T> {
-  const r = await fetch(BASE + url);
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const r = await fetch(BASE + url, init);
   if (!r.ok) {
     const body = await r.json().catch(() => ({ error: r.statusText }));
     throw new Error(body.error || `HTTP ${r.status}`);
   }
   return r.json();
 }
-
-async function post<T>(url: string): Promise<T> {
-  const r = await fetch(BASE + url, { method: 'POST' });
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({ error: r.statusText }));
-    throw new Error(body.error || `HTTP ${r.status}`);
-  }
-  return r.json();
-}
+const get = <T>(url: string) => request<T>(url);
+const post = <T>(url: string) => request<T>(url, { method: 'POST' });
 
 export const api = {
   health: () => get<{ status: string }>('/health'),

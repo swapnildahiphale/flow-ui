@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -18,11 +17,11 @@ type Handler struct {
 	// Archive mutates a task by shelling out to the `flow` CLI. The app is
 	// read-only on the DB by design, so every mutation routes through the CLI
 	// (see CLAUDE.md). Overridable in tests; defaults to the exec-based impl.
-	Archive func(ctx context.Context, slug string) error
+	Archive func(slug string) error
 }
 
 func New(conn *sql.DB, root string) *Handler {
-	return &Handler{DB: conn, Files: &files.Reader{Root: root}, Archive: flowArchive}
+	return &Handler{DB: conn, Files: &files.Reader{Root: root}, Archive: newFlowRunner(root).archive}
 }
 
 func (h *Handler) Routes(mux *http.ServeMux) {

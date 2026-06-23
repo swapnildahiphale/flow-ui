@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,7 +10,7 @@ func TestArchiveTask(t *testing.T) {
 	h, mux := setupFixture(t)
 
 	var archived string
-	h.Archive = func(_ context.Context, slug string) error {
+	h.Archive = func(slug string) error {
 		archived = slug
 		return nil
 	}
@@ -32,7 +31,7 @@ func TestArchiveTaskNotFound(t *testing.T) {
 	h, mux := setupFixture(t)
 
 	called := false
-	h.Archive = func(_ context.Context, _ string) error {
+	h.Archive = func(_ string) error {
 		called = true
 		return nil
 	}
