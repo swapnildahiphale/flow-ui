@@ -5,12 +5,13 @@ import { StatusDot } from '@/components/motion/StatusDot';
 import { ShimmerOverlay } from '@/components/motion/ShimmerOverlay';
 import { relative } from '@/lib/time';
 import { PRIORITY_VARIANT } from '@/lib/priority';
+import { TaskRowActions } from '@/components/tasks/TaskRowActions';
 
 export function TaskRowFull({ task }: { task: Task }) {
   return (
     <Link
       to="/tasks/$slug" params={{ slug: task.slug }}
-      className="task-row grid items-center gap-5 py-5 hover:bg-slate-50/60 transition-colors px-2 rounded-lg"
+      className="task-row group grid items-center gap-5 py-5 hover:bg-slate-50/60 transition-colors px-2 rounded-lg"
       style={{ gridTemplateColumns: '12px minmax(0,1fr) auto auto auto' }}
     >
       <StatusDot status={task.stale ? 'stale' : task.status} />
@@ -34,7 +35,12 @@ export function TaskRowFull({ task }: { task: Task }) {
             : <Chip variant="accent">{task.status}</Chip>}
         <div className="font-mono text-[11px] text-slate-500 mt-0.5">{task.waiting_on?.split(/[,(]/)[0]?.trim() ?? relative(task.updated_at)}</div>
       </div>
-      <div className="font-mono text-[11px] text-slate-400 shrink-0 w-16 text-right">{relative(task.updated_at)}</div>
+      <div className="relative shrink-0 w-20 h-7">
+        <div className="absolute inset-0 flex items-center justify-end font-mono text-[11px] text-slate-400 group-hover:opacity-0 transition-opacity">{relative(task.updated_at)}</div>
+        <div className="absolute inset-0 flex items-center justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+          <TaskRowActions task={task} />
+        </div>
+      </div>
     </Link>
   );
 }

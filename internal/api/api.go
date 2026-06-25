@@ -14,14 +14,16 @@ import (
 type Handler struct {
 	DB    *sql.DB
 	Files *files.Reader
-	// Archive mutates a task by shelling out to the `flow` CLI. The app is
+	// Archive and Do mutate a task by shelling out to the `flow` CLI. The app is
 	// read-only on the DB by design, so every mutation routes through the CLI
-	// (see CLAUDE.md). Overridable in tests; defaults to the exec-based impl.
+	// (see CLAUDE.md). Overridable in tests; default to the exec-based impl.
 	Archive func(slug string) error
+	Do      func(slug string) error
 }
 
 func New(conn *sql.DB, root string) *Handler {
-	return &Handler{DB: conn, Files: &files.Reader{Root: root}, Archive: newFlowRunner(root).archive}
+	r := newFlowRunner(root)
+	return &Handler{DB: conn, Files: &files.Reader{Root: root}, Archive: r.archive, Do: r.do}
 }
 
 func (h *Handler) Routes(mux *http.ServeMux) {
@@ -32,6 +34,7 @@ func (h *Handler) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/tasks/{slug}/brief", h.taskBrief)
 	mux.HandleFunc("GET /api/v1/tasks/{slug}/updates", h.taskUpdates)
 	mux.HandleFunc("POST /api/v1/tasks/{slug}/archive", h.archiveTask)
+	mux.HandleFunc("POST /api/v1/tasks/{slug}/do", h.doTask)
 	mux.HandleFunc("GET /api/v1/projects", h.listProjects)
 	mux.HandleFunc("GET /api/v1/projects/{slug}", h.getProject)
 	mux.HandleFunc("GET /api/v1/projects/{slug}/brief", h.projectBrief)

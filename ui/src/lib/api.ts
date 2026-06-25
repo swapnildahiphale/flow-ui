@@ -25,6 +25,7 @@ export const api = {
   taskBrief: (slug: string) => get<{ markdown: string }>(`/tasks/${encodeURIComponent(slug)}/brief`),
   taskUpdates: (slug: string) => get<{ updates: Update[]; count: number }>(`/tasks/${encodeURIComponent(slug)}/updates`),
   archiveTask: (slug: string) => post<{ slug: string; archived: boolean }>(`/tasks/${encodeURIComponent(slug)}/archive`),
+  doTask: (slug: string) => post<{ slug: string; started: boolean }>(`/tasks/${encodeURIComponent(slug)}/do`),
 
   projects: () => get<{ projects: Project[]; count: number }>('/projects'),
   project: (slug: string) => get<Project>(`/projects/${encodeURIComponent(slug)}`),
