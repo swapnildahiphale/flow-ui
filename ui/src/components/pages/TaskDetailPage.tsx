@@ -1,7 +1,7 @@
 import type { Task, Update } from '@/lib/types';
 import { Chip } from '@/components/primitives/Chip';
 import { MarkdownView } from '@/components/markdown/MarkdownView';
-import { Link, useNavigate } from '@tanstack/react-router';
+import { Link, useNavigate, useRouter, useCanGoBack } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Copy, CaretRight, Archive } from '@phosphor-icons/react';
 import { relative } from '@/lib/time';
@@ -11,6 +11,8 @@ import { PRIORITY_VARIANT } from '@/lib/priority';
 
 export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; brief?: string; updates: Update[]; vocab: Vocab }) {
   const navigate = useNavigate();
+  const router = useRouter();
+  const canGoBack = useCanGoBack();
   const queryClient = useQueryClient();
   const archive = useMutation({
     mutationFn: () => api.archiveTask(task.slug),
@@ -18,7 +20,10 @@ export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; br
       // Archiving touches lists, counts, project views and the graph — invalidate
       // everything rather than enumerate keys that drift over time.
       queryClient.invalidateQueries();
-      navigate({ to: '/tasks' });
+      // Return to the exact list the user came from (preserves filters + scroll);
+      // fall back to the task list when there's no in-app history (direct link / CmdK).
+      if (canGoBack) router.history.back();
+      else navigate({ to: '/tasks' });
     },
   });
   const isWaiting = task.status === 'in-progress' && !!task.waiting_on;
