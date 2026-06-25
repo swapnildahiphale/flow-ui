@@ -3,7 +3,7 @@ import { Chip } from '@/components/primitives/Chip';
 import { MarkdownView } from '@/components/markdown/MarkdownView';
 import { Link, useNavigate, useRouter, useCanGoBack } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Copy, CaretRight, Archive } from '@phosphor-icons/react';
+import { Copy, CaretRight, Archive, Play } from '@phosphor-icons/react';
 import { relative } from '@/lib/time';
 import { api } from '@/lib/api';
 import type { Vocab } from '@/lib/cross-ref';
@@ -25,6 +25,15 @@ export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; br
       if (canGoBack) router.history.back();
       else navigate({ to: '/tasks' });
     },
+  });
+  // `flow do` spawns an interactive terminal tab + Claude session on the host and
+  // returns immediately, so this is fire-and-forget: stay on the page and confirm
+  // via a banner rather than navigating away (unlike archive). `flow do` writes the
+  // task's session_id to the DB before it returns, so invalidate to pull the fresh
+  // session state (live marker, sidebar Session block, Do→Resume label).
+  const doTask = useMutation({
+    mutationFn: () => api.doTask(task.slug),
+    onSuccess: () => queryClient.invalidateQueries(),
   });
   const isWaiting = task.status === 'in-progress' && !!task.waiting_on;
   const statusLabel = isWaiting ? 'waiting' : task.status;
@@ -62,6 +71,14 @@ export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; br
           >
             <Copy size={14} /> <span className="font-mono">flow do {task.slug}</span>
           </button>
+          <button
+            onClick={() => doTask.mutate()}
+            disabled={doTask.isPending}
+            title="Run flow do for this task"
+            className="inline-flex items-center gap-2 h-9 px-3.5 rounded-full text-[13.5px] font-medium bg-white text-slate-600 border border-slate-200/70 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 transition active:translate-y-[1px] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Play size={14} /> <span>{doTask.isPending ? 'Opening…' : task.session_id ? 'Resume' : 'Do'}</span>
+          </button>
           {!task.archived_at && (
             <button
               onClick={() => archive.mutate()}
@@ -74,6 +91,16 @@ export function TaskDetailPage({ task, brief, updates, vocab }: { task: Task; br
           )}
         </div>
       </header>
+      {doTask.isSuccess && (
+        <div className="mb-6 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">
+          Opened a terminal tab for {task.slug} — switch to it to continue.
+        </div>
+      )}
+      {doTask.isError && (
+        <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 whitespace-pre-line">
+          Couldn’t start this task: {(doTask.error as Error).message}
+        </div>
+      )}
       {archive.isError && (
         <div className="mb-6 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           Couldn’t archive this task: {(archive.error as Error).message}
