@@ -32,7 +32,7 @@ func setupFixture(t *testing.T) (*Handler, *http.ServeMux) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	h := &Handler{DB: conn, Files: &files.Reader{Root: t.TempDir()}}
+	h := &Handler{DB: conn, Files: &files.Reader{Root: t.TempDir()}, Archive: func(string) error { return errString("archive not stubbed") }}
 	mux := http.NewServeMux()
 	h.Routes(mux)
 	return h, mux

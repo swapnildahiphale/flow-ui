@@ -2,14 +2,16 @@ import type { Task, Project, Playbook, Update, KBFile, Stats, TimelineEntry, Gra
 
 const BASE = '/api/v1';
 
-async function get<T>(url: string): Promise<T> {
-  const r = await fetch(BASE + url);
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const r = await fetch(BASE + url, init);
   if (!r.ok) {
     const body = await r.json().catch(() => ({ error: r.statusText }));
     throw new Error(body.error || `HTTP ${r.status}`);
   }
   return r.json();
 }
+const get = <T>(url: string) => request<T>(url);
+const post = <T>(url: string) => request<T>(url, { method: 'POST' });
 
 export const api = {
   health: () => get<{ status: string }>('/health'),
@@ -22,6 +24,7 @@ export const api = {
   task: (slug: string) => get<Task>(`/tasks/${encodeURIComponent(slug)}`),
   taskBrief: (slug: string) => get<{ markdown: string }>(`/tasks/${encodeURIComponent(slug)}/brief`),
   taskUpdates: (slug: string) => get<{ updates: Update[]; count: number }>(`/tasks/${encodeURIComponent(slug)}/updates`),
+  archiveTask: (slug: string) => post<{ slug: string; archived: boolean }>(`/tasks/${encodeURIComponent(slug)}/archive`),
 
   projects: () => get<{ projects: Project[]; count: number }>('/projects'),
   project: (slug: string) => get<Project>(`/projects/${encodeURIComponent(slug)}`),

@@ -58,6 +58,9 @@ func main() {
 	url := fmt.Sprintf("http://127.0.0.1:%d", addr.Port)
 
 	flowRoot := filepath.Dir(resolvedDB)
+	if filepath.Base(resolvedDB) != "flow.db" {
+		log.Printf("flow-ui: warning: --db points to %q, but `flow archive` resolves its db as $FLOW_ROOT/flow.db; archiving will target %s instead", resolvedDB, filepath.Join(flowRoot, "flow.db"))
+	}
 	var static fs.FS
 	if !*dev {
 		static = staticFS()
